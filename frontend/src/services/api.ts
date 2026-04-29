@@ -105,3 +105,37 @@ export function updateMedicine(
 export function deleteMedicine(id: number): Promise<void> {
   return request<void>(`/medicines/${id}`, { method: 'DELETE' })
 }
+
+// --- Reminders ---
+
+export interface Reminder {
+  id: number
+  medicine_id: number
+  time: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ListRemindersResponse {
+  data: Reminder[]
+  pagination: PaginationInfo
+}
+
+export function listReminders(medicineID?: number, page = 1, perPage = 50): Promise<ListRemindersResponse> {
+  const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
+  if (medicineID) params.set('medicine_id', String(medicineID))
+  return get<ListRemindersResponse>(`/reminders?${params}`)
+}
+
+export function createReminder(data: { medicine_id: number; time: string }): Promise<Reminder> {
+  return post<Reminder>('/reminders', data)
+}
+
+export function updateReminder(id: number, data: { time: string; enabled: boolean }): Promise<Reminder> {
+  return request<Reminder>(`/reminders/${id}`, { method: 'PUT', body: JSON.stringify(data) })
+}
+
+export function deleteReminder(id: number): Promise<void> {
+  return request<void>(`/reminders/${id}`, { method: 'DELETE' })
+}
