@@ -12,11 +12,13 @@ function cta() {
 <template>
   <section class="hero">
     <div class="hero-inner">
-      <h1>按时用药<br>就是最好的治疗</h1>
-      <p class="hero-sub">HealthVision 帮你管理药品、设定用药提醒，让每一次服药都准时无忧</p>
+      <h1>HealthVision</h1>
+      <p class="hero-sub">按时用药 就是最好的治疗</p>
       <div class="hero-actions">
         <button class="btn-primary btn-lg" @click="cta">免费开始使用</button>
-        <router-link to="/login" class="btn-outline-white btn-lg">已有账户？登录</router-link>
+        <router-link to="/login">
+          <button class="btn-primary btn-lg">已有账户？登录</button>
+        </router-link>
       </div>
     </div>
   </section>
@@ -159,38 +161,6 @@ function cta() {
   flex-wrap: wrap;
 }
 
-.hero .btn-primary {
-  color: var(--primary);
-  background: #ffffff;
-  font-weight: 600;
-}
-
-.hero .btn-primary:hover {
-  opacity: 0.92;
-}
-
-.btn-outline-white {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1.5px solid rgba(255, 255, 255, 0.6);
-  color: #ffffff;
-  border-radius: var(--radius-full);
-  padding: 0.875rem 2.5rem;
-  font-weight: 500;
-  font-size: 1rem;
-  font-family: var(--font-sans);
-  cursor: pointer;
-  text-decoration: none;
-  transition: background 0.2s, border-color 0.2s;
-}
-
-.btn-outline-white:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: #ffffff;
-  text-decoration: none;
-}
 
 .btn-lg {
   padding: 0.875rem 2.5rem;
