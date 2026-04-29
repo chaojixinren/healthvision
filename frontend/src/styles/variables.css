@@ -1,0 +1,19 @@
+:root {
+  --background: #fdf6f0;
+  --foreground: #2d1b14;
+  --primary: #8b2252;
+  --muted: #f5ebe3;
+  --card: #ffffff;
+  --border: #e8d5c8;
+  --accent: #c4536a;
+  --primary-hover: rgba(139, 34, 82, 0.9);
+  --primary-light: rgba(139, 34, 82, 0.05);
+  --hero-gradient: linear-gradient(#3d1f28 0%, #5a2d3e 30%, #7a4a5e 60%, #c4956a 85%, #e8c49a 100%);
+  --font-sans: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Georgia", "Times New Roman", serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --container-max: 48rem;
+  --radius-card: 0.75rem;
+  --radius-card-lg: 1rem;
+  --radius-full: 9999px;
+}
