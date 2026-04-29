@@ -18,7 +18,7 @@ async function submit() {
     setToken(res.access_token)
     router.push('/dashboard')
   } catch (e: any) {
-    error.value = e.message || 'Login failed'
+    error.value = e.message || '登录失败'
   } finally {
     loading.value = false
   }
@@ -28,21 +28,21 @@ async function submit() {
 <template>
   <div class="auth-page">
     <div class="card auth-card">
-      <h2>Welcome Back</h2>
+      <h2>欢迎回来</h2>
       <p class="auth-sub">登录你的 HealthVision 账户</p>
 
       <form @submit.prevent="submit" class="auth-form">
         <div class="field">
-          <label for="email">Email</label>
-          <input id="email" v-model="email" type="email" placeholder="you@example.com" required />
+          <label for="email">邮箱</label>
+          <input id="email" v-model="email" type="email" placeholder="请输入邮箱" required />
         </div>
         <div class="field">
-          <label for="password">Password</label>
-          <input id="password" v-model="password" type="password" placeholder="Enter your password" required />
+          <label for="password">密码</label>
+          <input id="password" v-model="password" type="password" placeholder="请输入密码" required />
         </div>
         <p v-if="error" class="error-msg">{{ error }}</p>
         <button type="submit" class="btn-primary btn-full" :disabled="loading">
-          {{ loading ? 'Logging in...' : 'Login' }}
+          {{ loading ? '登录中...' : '登录' }}
         </button>
       </form>
 

@@ -26,7 +26,7 @@ function cta() {
   <footer class="footer">
     <div class="container footer-inner">
       <span class="footer-brand">HealthVision</span>
-      <span class="footer-copy">&copy; 2026 HealthVision. All rights reserved.</span>
+      <span class="footer-copy">&copy; 2026 HealthVision 保留所有权利</span>
     </div>
   </footer>
 </template>

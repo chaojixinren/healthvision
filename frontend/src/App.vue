@@ -26,16 +26,16 @@ router.afterEach(() => {
       <router-link to="/" class="logo">HealthVision</router-link>
       <nav class="nav-links">
         <template v-if="authenticated">
-          <router-link to="/dashboard">Dashboard</router-link>
+          <router-link to="/dashboard">仪表盘</router-link>
           <router-link to="/medicines">药品管理</router-link>
           <router-link to="/reminders">用药提醒</router-link>
-          <router-link to="/profile">Profile</router-link>
-          <button class="btn-outline btn-sm" @click="logout">Logout</button>
+          <router-link to="/profile">个人中心</router-link>
+          <button class="btn-outline btn-sm" @click="logout">退出登录</button>
         </template>
         <template v-else>
-          <router-link to="/login">Login</router-link>
+          <router-link to="/login">登录</router-link>
           <router-link to="/register">
-            <button class="btn-primary btn-sm">Sign Up</button>
+            <button class="btn-primary btn-sm">注册</button>
           </router-link>
         </template>
       </nav>

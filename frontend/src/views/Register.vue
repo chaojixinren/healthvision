@@ -19,7 +19,7 @@ async function submit() {
     setToken(res.access_token)
     router.push('/dashboard')
   } catch (e: any) {
-    error.value = e.message || 'Registration failed'
+    error.value = e.message || '注册失败'
   } finally {
     loading.value = false
   }
@@ -29,25 +29,25 @@ async function submit() {
 <template>
   <div class="auth-page">
     <div class="card auth-card">
-      <h2>Create Account</h2>
+      <h2>创建账户</h2>
       <p class="auth-sub">注册一个新的 HealthVision 账户</p>
 
       <form @submit.prevent="submit" class="auth-form">
         <div class="field">
-          <label for="username">Username</label>
-          <input id="username" v-model="username" type="text" placeholder="Choose a username" required />
+          <label for="username">用户名</label>
+          <input id="username" v-model="username" type="text" placeholder="请设置用户名" required />
         </div>
         <div class="field">
-          <label for="email">Email</label>
-          <input id="email" v-model="email" type="email" placeholder="you@example.com" required />
+          <label for="email">邮箱</label>
+          <input id="email" v-model="email" type="email" placeholder="请输入邮箱" required />
         </div>
         <div class="field">
-          <label for="password">Password</label>
-          <input id="password" v-model="password" type="password" placeholder="Create a password" required minlength="6" />
+          <label for="password">密码</label>
+          <input id="password" v-model="password" type="password" placeholder="请设置密码（至少 6 位）" required minlength="6" />
         </div>
         <p v-if="error" class="error-msg">{{ error }}</p>
         <button type="submit" class="btn-primary btn-full" :disabled="loading">
-          {{ loading ? 'Creating...' : 'Sign Up' }}
+          {{ loading ? '注册中...' : '注册' }}
         </button>
       </form>
 

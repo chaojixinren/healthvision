@@ -26,10 +26,10 @@ function formatDate(dateStr: string): string {
 
 <template>
   <div class="container profile">
-    <div v-if="loading" class="loading">Loading...</div>
+    <div v-if="loading" class="loading">加载中...</div>
 
     <template v-else-if="user">
-      <h1>Profile</h1>
+      <h1>个人中心</h1>
 
       <div class="card-lg profile-card">
         <div class="avatar">
@@ -42,22 +42,22 @@ function formatDate(dateStr: string): string {
       </div>
 
       <div class="card-lg details-card">
-        <h3>Account Details</h3>
+        <h3>账户信息</h3>
         <ul class="detail-list">
           <li>
-            <span class="detail-label">Username</span>
+            <span class="detail-label">用户名</span>
             <span class="detail-value">{{ user.name }}</span>
           </li>
           <li>
-            <span class="detail-label">Email</span>
+            <span class="detail-label">邮箱</span>
             <span class="detail-value">{{ user.email }}</span>
           </li>
           <li>
-            <span class="detail-label">User ID</span>
+            <span class="detail-label">用户 ID</span>
             <span class="detail-value mono">{{ user.id }}</span>
           </li>
           <li>
-            <span class="detail-label">Registered</span>
+            <span class="detail-label">注册时间</span>
             <span class="detail-value">{{ formatDate(user.created_at) }}</span>
           </li>
         </ul>

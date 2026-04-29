@@ -18,12 +18,11 @@ onMounted(async () => {
 
 <template>
   <div class="container dashboard">
-    <div v-if="loading" class="loading">Loading...</div>
+    <div v-if="loading" class="loading">加载中...</div>
 
     <template v-else-if="user">
       <div class="card-lg welcome-card">
-        <h1>Welcome, {{ user.name }}</h1>
-        <p class="welcome-sub">这是你的健康仪表盘，开始记录和追踪你的健康数据吧</p>
+        <h1>{{ user.name }}，欢迎回来</h1>
       </div>
 
       <div class="card-lg quick-actions">
