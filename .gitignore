@@ -7,3 +7,6 @@ backend/*.db-wal
 backend/.gotestcache/
 .gocache/
 .claude
+.omx/
+.omc/
+.playwright-mcp

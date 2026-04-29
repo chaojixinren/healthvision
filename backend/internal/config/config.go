@@ -40,10 +40,10 @@ func Load() (Config, error) {
 		return Config{}, errors.New("JWT_SECRET must be set in production")
 	}
 
-	dbDriver := strings.ToLower(getenv("DB_DRIVER", "sqlite"))
-	dbDSN := getenv("DB_DSN", "data/healthvision.db")
-	if dbDriver == "mysql" && dbDSN == "" {
-		return Config{}, errors.New("DB_DSN is required when DB_DRIVER=mysql")
+	dbDriver := strings.ToLower(getenv("DB_DRIVER", "mysql"))
+	dbDSN := getenv("DB_DSN", "")
+	if dbDSN == "" {
+		return Config{}, errors.New("DB_DSN is required")
 	}
 
 	return Config{

@@ -17,9 +17,13 @@ import (
 	"healthvision/backend/internal/repository"
 	"healthvision/backend/internal/router"
 	"healthvision/backend/internal/services"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("load config: %v", err)

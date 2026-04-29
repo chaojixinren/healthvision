@@ -30,9 +30,7 @@ Authorization: Bearer <access_token>
 
 ### Database
 
-Default config uses SQLite at `backend/data/healthvision.db`.
-
-For MySQL:
+使用 MySQL 作为数据库，需在 `.env` 中配置：
 
 ```env
 DB_DRIVER=mysql
