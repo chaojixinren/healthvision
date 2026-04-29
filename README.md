@@ -105,3 +105,29 @@ Authorization: Bearer <access_token>
 | `GET` | `/api/v1/medicines/:id` | 药品详情 |
 | `PUT` | `/api/v1/medicines/:id` | 更新药品 |
 | `DELETE` | `/api/v1/medicines/:id` | 删除药品 |
+| `POST` | `/api/v1/reminders` | 新增用药提醒 |
+| `GET` | `/api/v1/reminders` | 提醒列表（支持 `?medicine_id=` 筛选） |
+| `GET` | `/api/v1/reminders/:id` | 提醒详情 |
+| `PUT` | `/api/v1/reminders/:id` | 更新提醒 |
+| `DELETE` | `/api/v1/reminders/:id` | 删除提醒 |
+
+### Reminder
+
+创建/更新提醒时 `time` 字段格式为 `HH:MM`（如 `"08:30"`），范围 `00:00`～`23:59`。
+
+```json
+// POST /api/v1/reminders
+{ "medicine_id": 1, "time": "08:30" }
+
+// PUT /api/v1/reminders/:id
+{ "time": "20:00", "enabled": true }
+```
+
+---
+
+## 移动端阶段 TODO
+
+- [ ] 打包移动端（Capacitor / Cordova）
+- [ ] 集成 Capacitor Local Notifications 插件，根据 Reminder 数据注册每日重复的本地通知
+- [ ] 应用启动时从后端拉取最新 Reminder 并全量重新调度通知
+- [ ] 用户增/删/改 Reminder 后立即重新调度

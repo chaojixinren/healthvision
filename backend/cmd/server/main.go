@@ -47,7 +47,11 @@ func main() {
 	medicineService := services.NewMedicineService(medicineRepo)
 	medicineHandler := handlers.NewMedicineHandler(medicineService)
 
-	engine := router.New(authHandler, medicineHandler, authMiddleware)
+	reminderRepo := repository.NewReminderRepository(db)
+	reminderService := services.NewReminderService(reminderRepo, medicineRepo)
+	reminderHandler := handlers.NewReminderHandler(reminderService)
+
+	engine := router.New(authHandler, medicineHandler, reminderHandler, authMiddleware)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           engine,
