@@ -26,6 +26,10 @@ function medicineName(id: number): string {
   return medicines.value.find((m) => m.id === id)?.name ?? '未知药品'
 }
 
+function medicineNotes(id: number): string {
+  return medicines.value.find((m) => m.id === id)?.notes ?? ''
+}
+
 async function fetchData() {
   loading.value = true
   error.value = ''
@@ -111,6 +115,7 @@ onMounted(fetchData)
       <div v-for="r in reminders" :key="r.id" class="card reminder-card">
         <div class="reminder-left">
           <div class="medicine-label">{{ medicineName(r.medicine_id) }}</div>
+          <div v-if="medicineNotes(r.medicine_id)" class="medicine-notes">{{ medicineNotes(r.medicine_id) }}</div>
           <div class="time">{{ r.time }}</div>
         </div>
         <div class="reminder-right">
@@ -207,6 +212,15 @@ onMounted(fetchData)
   background: var(--muted);
   padding: 0.25rem 0.75rem;
   border-radius: 999px;
+}
+
+.medicine-notes {
+  font-size: 0.75rem;
+  color: #8b2252;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .time {
