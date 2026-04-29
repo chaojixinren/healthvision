@@ -5,6 +5,7 @@ import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
 import Dashboard from '../views/Dashboard.vue'
 import Profile from '../views/Profile.vue'
+import Medicines from '../views/Medicines.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -13,6 +14,7 @@ const router = createRouter({
     { path: '/login', component: Login, meta: { guest: true } },
     { path: '/register', component: Register, meta: { guest: true } },
     { path: '/dashboard', component: Dashboard, meta: { auth: true } },
+    { path: '/medicines', component: Medicines, meta: { auth: true } },
     { path: '/profile', component: Profile, meta: { auth: true } },
   ],
 })

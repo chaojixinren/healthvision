@@ -43,7 +43,11 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService)
 	authMiddleware := middleware.AuthRequired(authService, userRepo)
 
-	engine := router.New(authHandler, authMiddleware)
+	medicineRepo := repository.NewMedicineRepository(db)
+	medicineService := services.NewMedicineService(medicineRepo)
+	medicineHandler := handlers.NewMedicineHandler(medicineService)
+
+	engine := router.New(authHandler, medicineHandler, authMiddleware)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           engine,

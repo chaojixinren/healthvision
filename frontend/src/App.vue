@@ -27,6 +27,7 @@ router.afterEach(() => {
       <nav class="nav-links">
         <template v-if="authenticated">
           <router-link to="/dashboard">Dashboard</router-link>
+          <router-link to="/medicines">药品管理</router-link>
           <router-link to="/profile">Profile</router-link>
           <button class="btn-outline btn-sm" @click="logout">Logout</button>
         </template>

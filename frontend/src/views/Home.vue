@@ -13,7 +13,7 @@ function cta() {
   <section class="hero">
     <div class="hero-inner">
       <h1>HealthVision</h1>
-      <p class="hero-sub">智能健康管理平台，用数据守护你的每一天</p>
+      <p class="hero-sub">用药提醒平台，关心你的健康</p>
       <div class="hero-actions">
         <button class="btn-primary btn-lg" @click="cta">开始使用</button>
         <router-link to="/login" class="btn-outline btn-lg">登录</router-link>
@@ -21,41 +21,7 @@ function cta() {
     </div>
   </section>
 
-  <section class="features container">
-    <div class="features-grid">
-      <div class="card feature-card">
-        <div class="feature-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-        </div>
-        <h3>健康监测</h3>
-        <p>实时追踪关键健康指标，全面掌握身体状态</p>
-      </div>
-      <div class="card feature-card">
-        <div class="feature-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        </div>
-        <h3>智能分析</h3>
-        <p>AI 驱动的数据分析，提供个性化健康建议</p>
-      </div>
-      <div class="card feature-card">
-        <div class="feature-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        </div>
-        <h3>隐私安全</h3>
-        <p>端到端加密存储，你的健康数据只属于你</p>
-      </div>
-    </div>
-  </section>
 
-  <section class="details container">
-    <h2>为什么选择 HealthVision</h2>
-    <ul class="detail-list">
-      <li><span class="bullet"></span><span>一站式整合多维度健康数据，告别信息碎片化</span></li>
-      <li><span class="bullet"></span><span>可视化趋势图表，让健康变化一目了然</span></li>
-      <li><span class="bullet"></span><span>智能预警机制，提前发现潜在健康风险</span></li>
-      <li><span class="bullet"></span><span>开放 API 接口，灵活对接第三方设备与服务</span></li>
-    </ul>
-  </section>
 
   <footer class="footer">
     <div class="container footer-inner">

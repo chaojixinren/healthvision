@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func New(authHandler *handlers.AuthHandler, authMiddleware gin.HandlerFunc) *gin.Engine {
+func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHandler, authMiddleware gin.HandlerFunc) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
@@ -25,6 +25,12 @@ func New(authHandler *handlers.AuthHandler, authMiddleware gin.HandlerFunc) *gin
 		protected.Use(authMiddleware)
 		{
 			protected.GET("/users/me", authHandler.Me)
+
+			protected.POST("/medicines", medicineHandler.Create)
+			protected.GET("/medicines", medicineHandler.List)
+			protected.GET("/medicines/:id", medicineHandler.Get)
+			protected.PUT("/medicines/:id", medicineHandler.Update)
+			protected.DELETE("/medicines/:id", medicineHandler.Delete)
 		}
 	}
 
