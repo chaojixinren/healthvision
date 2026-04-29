@@ -12,18 +12,12 @@ function cta() {
 <template>
   <section class="hero">
     <div class="hero-inner">
-      <div class="hero-badge">您的私人健康管家</div>
       <h1>按时用药<br>就是最好的治疗</h1>
       <p class="hero-sub">HealthVision 帮你管理药品、设定用药提醒，让每一次服药都准时无忧</p>
       <div class="hero-actions">
         <button class="btn-primary btn-lg" @click="cta">免费开始使用</button>
-        <router-link to="/login" class="btn-ghost btn-lg">已有账户？登录</router-link>
+        <router-link to="/login" class="btn-outline-white btn-lg">已有账户？登录</router-link>
       </div>
-    </div>
-    <div class="hero-wave">
-      <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M0 60C240 120 480 0 720 60C960 120 1200 0 1440 60V120H0V60Z" fill="var(--background)"/>
-      </svg>
     </div>
   </section>
 
@@ -119,7 +113,7 @@ function cta() {
 /* Hero */
 .hero {
   background: var(--hero-gradient);
-  padding: 5rem 1.5rem 0;
+  padding: 5rem 1.5rem;
   text-align: center;
   position: relative;
 }
@@ -127,7 +121,6 @@ function cta() {
 .hero-inner {
   max-width: var(--container-max);
   margin: 0 auto;
-  padding-bottom: 4rem;
 }
 
 .hero-badge {
@@ -176,13 +169,13 @@ function cta() {
   opacity: 0.92;
 }
 
-.btn-ghost {
+.btn-outline-white {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.8);
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  color: #ffffff;
   border-radius: var(--radius-full);
   padding: 0.875rem 2.5rem;
   font-weight: 500;
@@ -190,26 +183,18 @@ function cta() {
   font-family: var(--font-sans);
   cursor: pointer;
   text-decoration: none;
-  transition: color 0.2s;
+  transition: background 0.2s, border-color 0.2s;
 }
 
-.btn-ghost:hover {
-  color: #ffffff;
+.btn-outline-white:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #ffffff;
   text-decoration: none;
 }
 
 .btn-lg {
   padding: 0.875rem 2.5rem;
   font-size: 1rem;
-}
-
-.hero-wave {
-  line-height: 0;
-}
-
-.hero-wave svg {
-  width: 100%;
-  height: auto;
 }
 
 /* Features */
