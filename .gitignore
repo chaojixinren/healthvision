@@ -5,6 +5,7 @@ backend/*.db
 backend/*.db-shm
 backend/*.db-wal
 backend/.gotestcache/
+backend/server
 .gocache/
 .claude
 .omx/
