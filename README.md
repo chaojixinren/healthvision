@@ -73,18 +73,11 @@ npm run dev
 |---|---|---|
 | `APP_ENV` | 运行环境 | `development` |
 | `PORT` | 后端端口 | `8080` |
-| `DB_DRIVER` | 数据库驱动 | `sqlite` |
-| `DB_DSN` | 数据库连接串 | — |
+| `DB_DRIVER` | 数据库驱动 | `mysql` |
+| `DB_DSN` | 数据库连接串 | `user:password@tcp(127.0.0.1:3306)/healthvision?...` |
 | `JWT_SECRET` | JWT 签名密钥 | — |
 | `JWT_ISSUER` | JWT 签发者 | `healthvision` |
 | `ACCESS_TOKEN_TTL` | Token 有效期 | `24h` |
-
-### MySQL 配置示例
-
-```env
-DB_DRIVER=mysql
-DB_DSN=user:password@tcp(127.0.0.1:3306)/healthvision?charset=utf8mb4&parseTime=True&loc=Local
-```
 
 ## API 接口
 
