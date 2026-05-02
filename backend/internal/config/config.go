@@ -15,6 +15,13 @@ type Config struct {
 	Port     string
 	Database DatabaseConfig
 	Auth     AuthConfig
+	LLM      LLMConfig
+}
+
+type LLMConfig struct {
+	ModelName string
+	BaseURL   string
+	APIKey    string
 }
 
 type DatabaseConfig struct {
@@ -57,6 +64,11 @@ func Load() (Config, error) {
 			JWTSecret:      jwtSecret,
 			JWTIssuer:      getenv("JWT_ISSUER", "healthvision"),
 			AccessTokenTTL: ttl,
+		},
+		LLM: LLMConfig{
+			ModelName: getenv("LLM_MODEL", "gpt-4o-mini"),
+			BaseURL:   getenv("LLM_BASE_URL", "https://api.openai.com"),
+			APIKey:    getenv("LLM_API_KEY", ""),
 		},
 	}, nil
 }

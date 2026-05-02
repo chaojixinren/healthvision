@@ -29,6 +29,7 @@ router.afterEach(() => {
           <router-link to="/dashboard">仪表盘</router-link>
           <router-link to="/medicines">药品管理</router-link>
           <router-link to="/reminders">用药提醒</router-link>
+          <router-link to="/chat">智能问诊</router-link>
           <router-link to="/profile">个人中心</router-link>
           <button class="btn-outline btn-sm" @click="logout">退出登录</button>
         </template>
