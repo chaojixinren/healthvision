@@ -19,12 +19,17 @@ type MedicineStore interface {
 	Delete(ctx context.Context, id uint, userID uint) error
 }
 
-type MedicineService struct {
-	store MedicineStore
+type ReminderDeleter interface {
+	DeleteByMedicineID(ctx context.Context, medicineID uint, userID uint) error
 }
 
-func NewMedicineService(store MedicineStore) *MedicineService {
-	return &MedicineService{store: store}
+type MedicineService struct {
+	store    MedicineStore
+	reminder ReminderDeleter
+}
+
+func NewMedicineService(store MedicineStore, reminder ReminderDeleter) *MedicineService {
+	return &MedicineService{store: store, reminder: reminder}
 }
 
 func (s *MedicineService) Create(ctx context.Context, userID uint, name, imageURL, description, notes string) (*models.Medicine, error) {
@@ -84,8 +89,10 @@ func (s *MedicineService) Update(ctx context.Context, id uint, userID uint, name
 }
 
 func (s *MedicineService) Delete(ctx context.Context, id uint, userID uint) error {
-	err := s.store.Delete(ctx, id, userID)
-	if err != nil {
+	if err := s.reminder.DeleteByMedicineID(ctx, id, userID); err != nil {
+		return fmt.Errorf("delete reminders for medicine: %w", err)
+	}
+	if err := s.store.Delete(ctx, id, userID); err != nil {
 		return fmt.Errorf("delete medicine: %w", err)
 	}
 	return nil

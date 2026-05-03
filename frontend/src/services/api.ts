@@ -142,124 +142,31 @@ export function deleteReminder(id: number): Promise<void> {
 
 // --- Chat ---
 
-export interface SSEChatEvent {
-  id?: string
-  partial?: boolean
-  content: { role: 'user' | 'model'; parts: Array<{ text: string }> }
-  turnComplete?: boolean
-  finishReason?: string
-  actions?: unknown
+export interface Conversation {
+  id: number
+  user_id: number
+  title: string
+  created_at: string
+  updated_at: string
 }
 
-export interface ChatCallbacks {
-  onToken: (text: string) => void
-  onComplete: () => void
-  onError: (error: string) => void
+export interface ChatMessage {
+  id: number
+  user_id: number
+  conversation_id: number
+  role: string
+  content: string
+  created_at: string
 }
 
-export function createSession(userId: string, sessionId: string): Promise<void> {
-  return post<void>(`/agent/apps/healthvision/users/${userId}/sessions/${sessionId}`, {})
+export function listConversations(): Promise<{ data: Conversation[] }> {
+  return get<{ data: Conversation[] }>('/chat/conversations')
 }
 
-export function streamChat(
-  userId: string,
-  sessionId: string,
-  message: string,
-  callbacks: ChatCallbacks,
-): AbortController {
-  const controller = new AbortController()
-  const token = getToken()
+export function getMessages(conversationID: number): Promise<{ data: ChatMessage[] }> {
+  return post<{ data: ChatMessage[] }>('/chat/messages', { conversation_id: conversationID })
+}
 
-  fetch(`${BASE_URL}/agent/run_sse`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({
-      appName: 'healthvision',
-      userId,
-      sessionId,
-      newMessage: {
-        role: 'user',
-        parts: [{ text: message }],
-      },
-    }),
-    signal: controller.signal,
-  })
-    .then(async (res) => {
-      if (res.status === 401) {
-        removeToken()
-        window.location.href = '/login'
-        return
-      }
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({} as Record<string, string>))
-        callbacks.onError(body.error || `请求失败 (${res.status})`)
-        return
-      }
-      const reader = res.body?.getReader()
-      if (!reader) {
-        callbacks.onError('无法读取响应流')
-        return
-      }
-
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-          const events = buffer.split('\n\n')
-          buffer = events.pop() || ''
-
-          for (const raw of events) {
-            if (!raw.trim()) continue
-            let eventType = ''
-            let data = ''
-
-            for (const line of raw.split('\n')) {
-              if (line.startsWith('event: ')) eventType = line.slice(7).trim()
-              else if (line.startsWith('data: ')) data = line.slice(6)
-            }
-
-            if (eventType === 'error') {
-              try {
-                const parsed = JSON.parse(data) as { error?: string }
-                callbacks.onError(parsed.error || '流式响应错误')
-              } catch {
-                callbacks.onError('流式响应错误')
-              }
-              return
-            }
-            if (!data) continue
-
-            try {
-              const parsed = JSON.parse(data) as SSEChatEvent
-              if (parsed.partial) {
-                const text = parsed.content?.parts?.[0]?.text
-                if (text) callbacks.onToken(text)
-              }
-            } catch {
-              /* skip unparseable frames */
-            }
-          }
-        }
-        callbacks.onComplete()
-      } catch (err: unknown) {
-        if ((err as Error).name !== 'AbortError') {
-          callbacks.onError((err as Error).message || '流式响应中断')
-        }
-      }
-    })
-    .catch((err: unknown) => {
-      if ((err as Error).name !== 'AbortError') {
-        callbacks.onError((err as Error).message || '请求失败')
-      }
-    })
-
-  return controller
+export function deleteConversation(id: number): Promise<void> {
+  return post<void>('/chat/delete', { conversation_id: id })
 }

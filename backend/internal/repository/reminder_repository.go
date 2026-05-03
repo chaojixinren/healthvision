@@ -70,6 +70,13 @@ func (r *ReminderRepository) Delete(ctx context.Context, id uint, userID uint) e
 		Delete(&models.Reminder{}).Error
 }
 
+// DeleteByMedicineID deletes all reminders associated with a medicine.
+func (r *ReminderRepository) DeleteByMedicineID(ctx context.Context, medicineID uint, userID uint) error {
+	return r.db.WithContext(ctx).
+		Where("medicine_id = ? AND user_id = ?", medicineID, userID).
+		Delete(&models.Reminder{}).Error
+}
+
 func wrapReminderNotFound(err error) error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrReminderNotFound

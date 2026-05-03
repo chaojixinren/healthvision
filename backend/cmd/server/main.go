@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"healthvision/backend/internal/agent"
 	agentmodel "healthvision/backend/internal/agent/model"
 	"healthvision/backend/internal/config"
 	"healthvision/backend/internal/database"
@@ -20,7 +19,6 @@ import (
 	"healthvision/backend/internal/router"
 	"healthvision/backend/internal/services"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
 
@@ -47,10 +45,10 @@ func main() {
 	authMiddleware := middleware.AuthRequired(authService, userRepo)
 
 	medicineRepo := repository.NewMedicineRepository(db)
-	medicineService := services.NewMedicineService(medicineRepo)
+	reminderRepo := repository.NewReminderRepository(db)
+	medicineService := services.NewMedicineService(medicineRepo, reminderRepo)
 	medicineHandler := handlers.NewMedicineHandler(medicineService)
 
-	reminderRepo := repository.NewReminderRepository(db)
 	reminderService := services.NewReminderService(reminderRepo, medicineRepo)
 	reminderHandler := handlers.NewReminderHandler(reminderService)
 
@@ -59,27 +57,10 @@ func main() {
 		BaseURL: cfg.LLM.BaseURL,
 		APIKey:  cfg.LLM.APIKey,
 	})
-	rootAgent, err := agent.New("healthvision", llm, "你是一个健康助手，帮助用户管理药品和用药提醒。")
-	if err != nil {
-		log.Fatalf("create agent: %v", err)
-	}
-	agentRunner, sessionSvc := agent.Setup("healthvision", rootAgent)
-	agentHandler, err := agent.NewHandler(agentRunner, rootAgent, sessionSvc)
-	if err != nil {
-		log.Fatalf("create agent handler: %v", err)
-	}
+	chatService := services.NewChatService(db, llm, "你是一个健康助手，帮助用户管理药品和用药提醒。")
+	chatHandler := handlers.NewChatHandler(chatService)
 
-	sseHandler := agent.SSEHandler(agentRunner)
-	agentCombinedHandler := func(c *gin.Context) {
-		path := c.Request.URL.Path
-		if path == "/api/v1/agent/run_sse" || path == "/api/v1/agent/run_sse/" {
-			sseHandler(c)
-			return
-		}
-		http.StripPrefix("/api/v1/agent", agentHandler).ServeHTTP(c.Writer, c.Request)
-	}
-
-	engine := router.New(authHandler, medicineHandler, reminderHandler, agentCombinedHandler, authMiddleware)
+	engine := router.New(authHandler, medicineHandler, reminderHandler, chatHandler, authMiddleware)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           engine,

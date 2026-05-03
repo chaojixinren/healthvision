@@ -67,7 +67,7 @@ func Load() (Config, error) {
 		},
 		LLM: LLMConfig{
 			ModelName: getenv("LLM_MODEL", "gpt-4o-mini"),
-			BaseURL:   getenv("LLM_BASE_URL", "https://api.openai.com"),
+			BaseURL:   getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
 			APIKey:    getenv("LLM_API_KEY", ""),
 		},
 	}, nil

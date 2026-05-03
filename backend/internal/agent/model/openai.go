@@ -69,7 +69,7 @@ func (m *openAIModel) generateStream(ctx context.Context, req *model.LLMRequest)
 			return
 		}
 
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseURL+"/v1/chat/completions", bytes.NewReader(body))
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseURL+"/chat/completions", bytes.NewReader(body))
 		if err != nil {
 			yield(nil, err)
 			return
@@ -139,7 +139,7 @@ func (m *openAIModel) chat(ctx context.Context, req *model.LLMRequest) (*model.L
 		return nil, err
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, m.baseURL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
