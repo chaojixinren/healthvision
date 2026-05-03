@@ -22,8 +22,9 @@ func NewChatHandler(svc *services.ChatService) *ChatHandler {
 }
 
 type sendRequest struct {
-	ConversationID uint   `json:"conversation_id"`
-	Message        string `json:"message"`
+	ConversationID uint     `json:"conversation_id"`
+	Message        string   `json:"message"`
+	Images         []string `json:"images,omitempty"`
 }
 
 // Send processes a chat message and streams the response via SSE.
@@ -66,6 +67,7 @@ func (h *ChatHandler) Send(c *gin.Context) {
 		UserID:         user.ID,
 		ConversationID: req.ConversationID,
 		Message:        req.Message,
+		Images:         req.Images,
 	}, func(token string, err error) bool {
 		if err != nil {
 			writeSSEError(c.Writer, flusher, err.Error())

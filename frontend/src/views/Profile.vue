@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { getMe, type User } from '../services/api'
+import { removeToken } from '../services/auth'
 
+const router = useRouter()
 const user = ref<User | null>(null)
 const loading = ref(true)
 
@@ -14,6 +17,11 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+function logout() {
+  removeToken()
+  router.push('/')
+}
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('zh-CN', {
@@ -62,6 +70,8 @@ function formatDate(dateStr: string): string {
           </li>
         </ul>
       </div>
+
+      <button class="btn-outline logout-btn" @click="logout">退出登录</button>
     </template>
   </div>
 </template>
@@ -151,5 +161,10 @@ function formatDate(dateStr: string): string {
 .mono {
   font-family: var(--font-mono);
   font-size: 0.8125rem;
+}
+
+.logout-btn {
+  width: 100%;
+  padding: 0.75rem;
 }
 </style>

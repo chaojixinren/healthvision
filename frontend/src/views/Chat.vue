@@ -1,27 +1,33 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { useChatStore } from '../stores/chat'
 import type { Conversation } from '../stores/chat'
 
 marked.setOptions({ gfm: true, breaks: true })
 
 function renderMarkdown(text: string): string {
-  return marked.parse(text, { async: false }) as string
+  return DOMPurify.sanitize(marked.parse(text, { async: false }) as string)
 }
 
 const store = useChatStore()
 
 const input = ref('')
+const images = ref<string[]>([])
 const messagesEl = ref<HTMLElement>()
 const inputEl = ref<HTMLTextAreaElement>()
+const fileInputEl = ref<HTMLInputElement>()
 const loading = ref(true)
 const sidebarOpen = ref(false)
-
 const isLastMessageAssistant = computed(() => {
   const msgs = store.messages
   return msgs.length > 0 && msgs[msgs.length - 1].role === 'assistant'
 })
+
+const resolvedImages = computed(() =>
+  store.messages.map((m) => (m.images ? parseImagesFromJSON(m.images) : ([] as string[]))),
+)
 
 onMounted(async () => {
   try {
@@ -40,7 +46,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   store.stopStreaming()
-  unlockBodyScroll()
+  document.body.style.overflow = ''
 })
 
 watch(
@@ -57,30 +63,16 @@ function scrollToBottom() {
   }
 }
 
-function lockBodyScroll() {
-  document.body.style.overflow = 'hidden'
-}
-
-function unlockBodyScroll() {
-  document.body.style.overflow = ''
-}
-
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
-  if (sidebarOpen.value) {
-    lockBodyScroll()
-  } else {
-    unlockBodyScroll()
-  }
 }
 
 function closeSidebar() {
   sidebarOpen.value = false
-  unlockBodyScroll()
 }
 
 watch(sidebarOpen, (open) => {
-  if (!open) unlockBodyScroll()
+  document.body.style.overflow = open ? 'hidden' : ''
 })
 
 function handleSelect(conv: Conversation) {
@@ -106,25 +98,88 @@ async function handleDelete(conv: Conversation) {
 
 async function handleSend() {
   const text = input.value.trim()
-  if (!text) return
+  if (!text && images.value.length === 0) return
   input.value = ''
-  await store.send(text)
+  const imgs = images.value.length > 0 ? [...images.value] : undefined
+  images.value = []
+  await store.send(text || '请分析这张图片', imgs)
   nextTick(() => inputEl.value?.focus())
 }
 
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault()
-    handleSend()
+// --- Image handling ---
+
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const img = new Image()
+      img.onload = () => {
+        let { width, height } = img
+        const maxDim = 2000
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round(height * maxDim / width)
+            width = maxDim
+          } else {
+            width = Math.round(width * maxDim / height)
+            height = maxDim
+          }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', 0.8))
+      }
+      img.onerror = () => reject(new Error('Failed to load image'))
+      img.src = reader.result as string
+    }
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+}
+
+function parseImagesFromJSON(json: string): string[] {
+  try {
+    return JSON.parse(json) as string[]
+  } catch {
+    return []
   }
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  const now = new Date()
-  const diff = now.getTime() - d.getTime()
-  if (diff < 86400000) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  return d.toLocaleDateString()
+async function handleImageInput(files: FileList | null) {
+  if (!files) return
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    if (!file.type.startsWith('image/')) continue
+    try {
+      const dataURL = await compressImage(file)
+      images.value = [...images.value, dataURL]
+    } catch {
+      // skip unreadable files
+    }
+  }
+}
+
+function removeImage(index: number) {
+  images.value = images.value.filter((_, i) => i !== index)
+}
+
+function triggerFileInput() {
+  fileInputEl.value?.click()
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && e.ctrlKey) {
+    e.preventDefault()
+    handleSend()
+    return
+  }
+  if (e.key === 'Enter' && !e.shiftKey && input.value.trim()) {
+    e.preventDefault()
+    handleSend()
+  }
 }
 
 function autoResize() {
@@ -238,7 +293,11 @@ function autoResize() {
           </div>
 
           <!-- Messages -->
-          <div v-else ref="messagesEl" class="messages-area">
+          <div
+            v-else
+            ref="messagesEl"
+            class="messages-area"
+          >
             <div
               v-for="(msg, i) in store.messages"
               :key="i"
@@ -253,7 +312,18 @@ function autoResize() {
                     <span class="dot"></span>
                   </span>
 
-                  <template v-else-if="msg.role === 'user'">{{ msg.content }}</template>
+                  <template v-else-if="msg.role === 'user'">
+                    <div v-if="msg.content" class="user-text">{{ msg.content }}</div>
+                    <div v-if="msg.images" class="user-images">
+                      <img
+                        v-for="(img, imgIdx) in resolvedImages[i]"
+                        :key="imgIdx"
+                        :src="img"
+                        class="user-image-thumb"
+                        loading="lazy"
+                      />
+                    </div>
+                  </template>
                   <div v-else class="chat-md" v-html="renderMarkdown(msg.content)"></div>
                 </div>
               </div>
@@ -291,12 +361,36 @@ function autoResize() {
 
           <!-- Input -->
           <div class="input-section">
+            <!-- Image previews -->
+            <div v-if="images.length > 0" class="image-previews">
+              <div v-for="(img, idx) in images" :key="idx" class="image-preview-item">
+                <img :src="img" class="image-preview-thumb" />
+                <button class="image-preview-remove" @click="removeImage(idx)" title="移除图片">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+            </div>
             <div class="input-wrapper">
+              <button
+                class="image-upload-btn"
+                :disabled="store.sending || loading"
+                @click="triggerFileInput"
+                title="上传图片"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+              </button>
               <textarea
                 ref="inputEl"
                 v-model="input"
                 class="chat-input"
-                placeholder="输入你的问题，Enter 发送，Shift+Enter 换行"
+                placeholder="发信息..."
                 :disabled="store.sending || loading"
                 rows="1"
                 @keydown="handleKeydown"
@@ -305,7 +399,7 @@ function autoResize() {
               <button
                 class="send-btn"
                 :class="{ loading: store.sending }"
-                :disabled="store.sending || !input.trim() || loading"
+                :disabled="store.sending || (!input.trim() && images.length === 0) || loading"
                 @click="handleSend"
                 title="发送"
               >
@@ -318,6 +412,14 @@ function autoResize() {
                 </svg>
               </button>
             </div>
+            <input
+              ref="fileInputEl"
+              type="file"
+              accept="image/*"
+              multiple
+              class="file-input-hidden"
+              @change="handleImageInput(($event.target as HTMLInputElement).files)"
+            />
           </div>
         </div>
       </div>
@@ -974,6 +1076,115 @@ function autoResize() {
   .input-section {
     padding: 12px;
     padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ── Image previews (input area) ── */
+.image-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 800px;
+  margin: 0 auto 10px;
+}
+
+.image-preview-item {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.image-preview-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-preview-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s;
+}
+
+.image-preview-remove:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+/* ── Upload button ── */
+.image-upload-btn {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.image-upload-btn:hover:not(:disabled) {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.image-upload-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.file-input-hidden {
+  display: none;
+}
+
+/* ── User message images ── */
+.user-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.user-image-thumb {
+  max-width: 200px;
+  max-height: 160px;
+  border-radius: 8px;
+  object-fit: cover;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.user-image-thumb:hover {
+  opacity: 0.85;
+}
+
+.user-text {
+  white-space: pre-wrap;
+}
+
+/* ── Mobile tweaks ── */
+@media (max-width: 860px) {
+  .image-previews {
+    padding: 0 4px;
   }
 }
 </style>

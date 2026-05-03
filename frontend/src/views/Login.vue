@@ -16,7 +16,7 @@ async function submit() {
   try {
     const res = await login({ email: email.value, password: password.value })
     setToken(res.access_token)
-    router.push('/dashboard')
+    router.push('/medicines')
   } catch (e: any) {
     error.value = e.message || '登录失败'
   } finally {

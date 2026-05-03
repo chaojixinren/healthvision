@@ -55,8 +55,10 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  async function send(text: string) {
-    if (!text.trim() || sending.value) return
+  async function send(text: string, images?: string[]) {
+    if ((!text.trim() && (!images || images.length === 0)) || sending.value) return
+
+    const imagesJSON = images && images.length > 0 ? JSON.stringify(images) : ''
 
     const userMsg: ChatMessage = {
       id: 0,
@@ -64,6 +66,7 @@ export const useChatStore = defineStore('chat', () => {
       conversation_id: currentConversationID.value,
       role: 'user',
       content: text,
+      images: imagesJSON,
       created_at: new Date().toISOString(),
     }
     messages.value = [...messages.value, userMsg]
@@ -96,6 +99,7 @@ export const useChatStore = defineStore('chat', () => {
         body: JSON.stringify({
           conversation_id: currentConversationID.value,
           message: text,
+          ...(images && images.length > 0 ? { images } : {}),
         }),
         signal: abortController.signal,
       })

@@ -156,6 +156,7 @@ export interface ChatMessage {
   conversation_id: number
   role: string
   content: string
+  images?: string
   created_at: string
 }
 

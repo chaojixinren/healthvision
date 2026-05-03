@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
-import { isAuthenticated, removeToken } from './services/auth'
+import { isAuthenticated } from './services/auth'
 import { ref, computed } from 'vue'
 
 const router = useRouter()
@@ -9,12 +9,6 @@ const authenticated = ref(isAuthenticated())
 
 const isLanding = computed(() => route.path === '/')
 
-function logout() {
-  removeToken()
-  authenticated.value = false
-  router.push('/')
-}
-
 router.afterEach(() => {
   authenticated.value = isAuthenticated()
 })
@@ -22,16 +16,14 @@ router.afterEach(() => {
 
 <template>
   <header v-if="!isLanding" class="navbar">
-    <div class="container navbar-inner">
-      <router-link to="/" class="logo">HealthVision</router-link>
+    <div class="container navbar-inner" :class="{ centered: authenticated }">
+      <router-link v-if="!authenticated" to="/" class="logo">HealthVision</router-link>
       <nav class="nav-links">
         <template v-if="authenticated">
-          <router-link to="/dashboard">仪表盘</router-link>
           <router-link to="/medicines">药品管理</router-link>
           <router-link to="/reminders">用药提醒</router-link>
           <router-link to="/chat">智能问诊</router-link>
           <router-link to="/profile">个人中心</router-link>
-          <button class="btn-outline btn-sm" @click="logout">退出登录</button>
         </template>
         <template v-else>
           <router-link to="/login">登录</router-link>
@@ -62,6 +54,10 @@ router.afterEach(() => {
   align-items: center;
   justify-content: space-between;
   height: 3.5rem;
+}
+
+.navbar-inner.centered {
+  justify-content: center;
 }
 
 .logo {

@@ -17,7 +17,7 @@ async function submit() {
   try {
     const res = await register({ name: username.value, email: email.value, password: password.value })
     setToken(res.access_token)
-    router.push('/dashboard')
+    router.push('/medicines')
   } catch (e: any) {
     error.value = e.message || '注册失败'
   } finally {

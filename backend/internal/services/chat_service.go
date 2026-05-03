@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -38,6 +40,7 @@ type SendInput struct {
 	UserID         uint
 	ConversationID uint
 	Message        string
+	Images         []string
 }
 
 // SendResult is returned after message processing completes.
@@ -67,11 +70,14 @@ func (s *ChatService) Send(ctx context.Context, input SendInput, cb StreamCallba
 		convID = conv.ID
 	}
 
+	imagesJSON := marshalImages(input.Images)
+
 	userMsg := &models.ChatMessage{
 		UserID:         userID,
 		ConversationID: convID,
 		Role:           roleUser,
 		Content:        input.Message,
+		Images:         imagesJSON,
 	}
 	if err := s.db.WithContext(ctx).Create(userMsg).Error; err != nil {
 		return nil, fmt.Errorf("save user message: %w", err)
@@ -82,7 +88,7 @@ func (s *ChatService) Send(ctx context.Context, input SendInput, cb StreamCallba
 		return nil, err
 	}
 
-	contents := buildContents(history, input.Message)
+	contents := buildContents(history, input.Message, input.Images)
 
 	var reply strings.Builder
 	for resp, err := range s.llm.GenerateContent(ctx, &model.LLMRequest{
@@ -191,23 +197,74 @@ func (s *ChatService) getHistory(ctx context.Context, convID uint, userID uint) 
 	return msgs, nil
 }
 
-func buildContents(history []models.ChatMessage, userMsg string) []*genai.Content {
+func buildContents(history []models.ChatMessage, userMsg string, images []string) []*genai.Content {
 	contents := make([]*genai.Content, 0, len(history)+1)
 	for _, m := range history {
 		role := m.Role
 		if role == roleAssistant {
 			role = roleModel
 		}
-		contents = append(contents, &genai.Content{
-			Role:  role,
-			Parts: []*genai.Part{{Text: m.Content}},
-		})
+		parts := []*genai.Part{{Text: m.Content}}
+
+		if m.Images != "" {
+			var stored []string
+			if json.Unmarshal([]byte(m.Images), &stored) == nil {
+				for _, img := range stored {
+					if p := dataURLToPart(img); p != nil {
+						parts = append(parts, p)
+					}
+				}
+			}
+		}
+		contents = append(contents, &genai.Content{Role: role, Parts: parts})
 	}
-	contents = append(contents, &genai.Content{
-		Role:  roleUser,
-		Parts: []*genai.Part{{Text: userMsg}},
-	})
+
+	parts := []*genai.Part{{Text: userMsg}}
+	for _, img := range images {
+		if p := dataURLToPart(img); p != nil {
+			parts = append(parts, p)
+		}
+	}
+	contents = append(contents, &genai.Content{Role: roleUser, Parts: parts})
 	return contents
+}
+
+// marshalImages serializes image data URLs to a JSON array for DB storage.
+func marshalImages(images []string) string {
+	if len(images) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(images)
+	return string(b)
+}
+
+// dataURLToPart parses a data URL (data:image/jpeg;base64,...) into a genai.Part with InlineData.
+func dataURLToPart(dataURL string) *genai.Part {
+	mime, b64, ok := parseDataURL(dataURL)
+	if !ok {
+		return nil
+	}
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil
+	}
+	return &genai.Part{
+		InlineData: &genai.Blob{Data: raw, MIMEType: mime},
+	}
+}
+
+// parseDataURL extracts MIME type and base64 payload from a data URL.
+func parseDataURL(url string) (mime, b64 string, ok bool) {
+	const prefix = "data:"
+	if !strings.HasPrefix(url, prefix) {
+		return "", "", false
+	}
+	rest := url[len(prefix):]
+	idx := strings.Index(rest, ";base64,")
+	if idx < 0 {
+		return "", "", false
+	}
+	return rest[:idx], rest[idx+len(";base64,"):], true
 }
 
 func extractTitle(reply string) string {

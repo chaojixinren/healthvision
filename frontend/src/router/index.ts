@@ -3,7 +3,6 @@ import { isAuthenticated } from '../services/auth'
 import Home from '../views/Home.vue'
 import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
-import Dashboard from '../views/Dashboard.vue'
 import Profile from '../views/Profile.vue'
 import Medicines from '../views/Medicines.vue'
 import Reminders from '../views/Reminders.vue'
@@ -15,7 +14,6 @@ const router = createRouter({
     { path: '/', component: Home },
     { path: '/login', component: Login, meta: { guest: true } },
     { path: '/register', component: Register, meta: { guest: true } },
-    { path: '/dashboard', component: Dashboard, meta: { auth: true } },
     { path: '/medicines', component: Medicines, meta: { auth: true } },
     { path: '/reminders', component: Reminders, meta: { auth: true } },
     { path: '/chat', component: Chat, meta: { auth: true } },
@@ -25,7 +23,7 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   if (to.meta.auth && !isAuthenticated()) return '/login'
-  if (to.meta.guest && isAuthenticated()) return '/dashboard'
+  if (to.meta.guest && isAuthenticated()) return '/medicines'
 })
 
 export default router

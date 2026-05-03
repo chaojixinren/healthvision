@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -182,7 +183,17 @@ func (m *openAIModel) chat(ctx context.Context, req *model.LLMRequest) (*model.L
 
 type chatMessage struct {
 	Role    string `json:"role"`
-	Content string `json:"content"`
+	Content any    `json:"content"`
+}
+
+type visionBlock struct {
+	Type     string    `json:"type"`
+	Text     string    `json:"text,omitempty"`
+	ImageURL *imageURL `json:"image_url,omitempty"`
+}
+
+type imageURL struct {
+	URL string `json:"url"`
 }
 
 type openAIChatRequest struct {
@@ -228,15 +239,7 @@ func (m *openAIModel) buildChatRequest(req *model.LLMRequest, stream bool) ([]by
 		if role == "model" {
 			role = "assistant"
 		}
-		var textParts []string
-		for _, part := range content.Parts {
-			if part.Text != "" {
-				textParts = append(textParts, part.Text)
-			}
-		}
-		if len(textParts) > 0 {
-			messages = append(messages, chatMessage{Role: role, Content: strings.Join(textParts, "\n")})
-		}
+		messages = append(messages, chatMessage{Role: role, Content: buildContent(content.Parts)})
 	}
 
 	modelName := req.Model
@@ -259,6 +262,40 @@ func (m *openAIModel) buildChatRequest(req *model.LLMRequest, stream bool) ([]by
 	}
 
 	return json.Marshal(body)
+}
+
+func buildContent(parts []*genai.Part) any {
+	// Check if any image parts exist
+	hasImage := false
+	var texts []string
+	for _, p := range parts {
+		if p.InlineData != nil && len(p.InlineData.Data) > 0 {
+			hasImage = true
+		}
+		if p.Text != "" {
+			texts = append(texts, p.Text)
+		}
+	}
+	if !hasImage {
+		return strings.Join(texts, "\n")
+	}
+
+	// Vision format: array of {type, text/image_url} blocks
+	blocks := make([]visionBlock, 0, len(parts))
+	for _, p := range parts {
+		if p.Text != "" {
+			blocks = append(blocks, visionBlock{Type: "text", Text: p.Text})
+		}
+		if p.InlineData != nil && len(p.InlineData.Data) > 0 {
+			blocks = append(blocks, visionBlock{
+				Type: "image_url",
+				ImageURL: &imageURL{
+					URL: fmt.Sprintf("data:%s;base64,%s", p.InlineData.MIMEType, base64.StdEncoding.EncodeToString(p.InlineData.Data)),
+				},
+			})
+		}
+	}
+	return blocks
 }
 
 func (m *openAIModel) setHeaders(req *http.Request) {
