@@ -2,12 +2,13 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { register } from '../services/api'
-import { setToken } from '../services/auth'
+import { setToken, setUser } from '../services/auth'
 
 const router = useRouter()
 const username = ref('')
 const email = ref('')
 const password = ref('')
+const isOld = ref(false)
 const error = ref('')
 const loading = ref(false)
 
@@ -15,9 +16,10 @@ async function submit() {
   error.value = ''
   loading.value = true
   try {
-    const res = await register({ name: username.value, email: email.value, password: password.value })
+    const res = await register({ name: username.value, email: email.value, password: password.value, is_old: isOld.value })
     setToken(res.access_token)
-    router.push('/medicines')
+    setUser(res.user)
+    router.push(res.user.is_old ? '/reminders' : '/medicines')
   } catch (e: any) {
     error.value = e.message || '注册失败'
   } finally {
@@ -45,6 +47,31 @@ async function submit() {
           <label for="password">密码</label>
           <input id="password" v-model="password" type="password" placeholder="请设置密码（至少 6 位）" required minlength="6" />
         </div>
+
+        <div class="field">
+          <label>账户类型</label>
+          <div class="identity-selector">
+            <div
+              class="identity-card"
+              :class="{ active: isOld }"
+              @click="isOld = true"
+            >
+              <span class="identity-icon">👴</span>
+              <span class="identity-label">老人端</span>
+              <span class="identity-desc">用药提醒管理</span>
+            </div>
+            <div
+              class="identity-card"
+              :class="{ active: !isOld }"
+              @click="isOld = false"
+            >
+              <span class="identity-icon">🧑</span>
+              <span class="identity-label">子女端</span>
+              <span class="identity-desc">管理家人健康</span>
+            </div>
+          </div>
+        </div>
+
         <p v-if="error" class="error-msg">{{ error }}</p>
         <button type="submit" class="btn-primary btn-full" :disabled="loading">
           {{ loading ? '注册中...' : '注册' }}
@@ -69,7 +96,7 @@ async function submit() {
 
 .auth-card {
   width: 100%;
-  max-width: 24rem;
+  max-width: 26rem;
   padding: 2rem;
 }
 
@@ -95,6 +122,48 @@ async function submit() {
 .field {
   display: flex;
   flex-direction: column;
+}
+
+.identity-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.identity-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.875rem 0.5rem;
+  border: 2px solid var(--border);
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.identity-card:hover {
+  border-color: var(--primary);
+}
+
+.identity-card.active {
+  border-color: var(--primary);
+  background: #f0faf4;
+}
+
+.identity-icon {
+  font-size: 1.5rem;
+}
+
+.identity-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.identity-desc {
+  font-size: 0.75rem;
+  color: #8a7b70;
 }
 
 .btn-full {

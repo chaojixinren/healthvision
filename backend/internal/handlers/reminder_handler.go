@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -11,17 +12,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type ReminderHandler struct {
-	svc *services.ReminderService
+type MedicineNameLookup interface {
+	FindByIDAny(ctx context.Context, id uint) (*models.Medicine, error)
 }
 
-func NewReminderHandler(svc *services.ReminderService) *ReminderHandler {
-	return &ReminderHandler{svc: svc}
+type ReminderHandler struct {
+	svc       *services.ReminderService
+	medLookup MedicineNameLookup
+}
+
+func NewReminderHandler(svc *services.ReminderService, medLookup MedicineNameLookup) *ReminderHandler {
+	return &ReminderHandler{svc: svc, medLookup: medLookup}
 }
 
 type reminderRequest struct {
-	MedicineID uint   `json:"medicine_id" binding:"required"`
-	Time       string `json:"time" binding:"required"`
+	MedicineID   uint   `json:"medicine_id" binding:"required"`
+	Time         string `json:"time" binding:"required"`
+	TargetUserID uint   `json:"target_user_id"`
 }
 
 type reminderUpdateRequest struct {
@@ -30,17 +37,31 @@ type reminderUpdateRequest struct {
 }
 
 type reminderResponse struct {
-	ID         uint   `json:"id"`
-	MedicineID uint   `json:"medicine_id"`
-	Time       string `json:"time"`
-	Enabled    bool   `json:"enabled"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
+	ID           uint   `json:"id"`
+	UserID       uint   `json:"user_id"`
+	MedicineID   uint   `json:"medicine_id"`
+	MedicineName string `json:"medicine_name"`
+	Time         string `json:"time"`
+	Enabled      bool   `json:"enabled"`
+	CreatedBy    uint   `json:"created_by"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
 }
 
 type listRemindersResponse struct {
 	Data       []reminderResponse `json:"data"`
 	Pagination paginationInfo      `json:"pagination"`
+}
+
+func (h *ReminderHandler) medicineName(ctx context.Context, id uint) string {
+	if h.medLookup == nil {
+		return ""
+	}
+	m, err := h.medLookup.FindByIDAny(ctx, id)
+	if err != nil {
+		return "未知药品"
+	}
+	return m.Name
 }
 
 func (h *ReminderHandler) Create(c *gin.Context) {
@@ -56,7 +77,12 @@ func (h *ReminderHandler) Create(c *gin.Context) {
 		return
 	}
 
-	reminder, err := h.svc.Create(c.Request.Context(), user.ID, req.MedicineID, req.Time)
+	targetUserID := req.TargetUserID
+	if targetUserID == 0 {
+		targetUserID = user.ID
+	}
+
+	reminder, err := h.svc.Create(c.Request.Context(), user.ID, targetUserID, req.MedicineID, req.Time)
 	if err != nil {
 		if err == services.ErrMedicineNotFound {
 			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "medicine not found")
@@ -66,11 +92,16 @@ func (h *ReminderHandler) Create(c *gin.Context) {
 			httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_time", err.Error())
 			return
 		}
+		if err == services.ErrNotBound {
+			httputil.ErrorJSON(c, http.StatusBadRequest, "not_bound", "not bound to this user")
+			return
+		}
 		httputil.ErrorJSON(c, http.StatusInternalServerError, "create_failed", "failed to create reminder")
 		return
 	}
 
-	c.JSON(http.StatusCreated, toReminderResponse(reminder))
+	name := h.medicineName(c.Request.Context(), reminder.MedicineID)
+	c.JSON(http.StatusCreated, h.toResponse(reminder, name))
 }
 
 func (h *ReminderHandler) List(c *gin.Context) {
@@ -92,10 +123,27 @@ func (h *ReminderHandler) List(c *gin.Context) {
 		}
 	}
 
-	reminders, total, err := h.svc.List(c.Request.Context(), user.ID, medicineID, page, perPage)
+	var reminders []models.Reminder
+	var total int64
+	var err error
+
+	if user.IsOld {
+		reminders, total, err = h.svc.List(c.Request.Context(), user.ID, medicineID, page, perPage)
+	} else {
+		reminders, total, err = h.svc.ListByCreator(c.Request.Context(), user.ID, medicineID, page, perPage)
+	}
 	if err != nil {
 		httputil.ErrorJSON(c, http.StatusInternalServerError, "list_failed", "failed to list reminders")
 		return
+	}
+
+	// batch lookup medicine names
+	medNames := make(map[uint]string)
+	for _, r := range reminders {
+		if _, ok := medNames[r.MedicineID]; ok {
+			continue
+		}
+		medNames[r.MedicineID] = h.medicineName(c.Request.Context(), r.MedicineID)
 	}
 
 	resp := listRemindersResponse{
@@ -107,7 +155,7 @@ func (h *ReminderHandler) List(c *gin.Context) {
 		},
 	}
 	for i, r := range reminders {
-		resp.Data[i] = toReminderResponse(&r)
+		resp.Data[i] = h.toResponse(&r, medNames[r.MedicineID])
 	}
 
 	c.JSON(http.StatusOK, resp)
@@ -136,7 +184,8 @@ func (h *ReminderHandler) Get(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toReminderResponse(reminder))
+	name := h.medicineName(c.Request.Context(), reminder.MedicineID)
+	c.JSON(http.StatusOK, h.toResponse(reminder, name))
 }
 
 func (h *ReminderHandler) Update(c *gin.Context) {
@@ -172,7 +221,8 @@ func (h *ReminderHandler) Update(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toReminderResponse(reminder))
+	name := h.medicineName(c.Request.Context(), reminder.MedicineID)
+	c.JSON(http.StatusOK, h.toResponse(reminder, name))
 }
 
 func (h *ReminderHandler) Delete(c *gin.Context) {
@@ -196,13 +246,16 @@ func (h *ReminderHandler) Delete(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func toReminderResponse(r *models.Reminder) reminderResponse {
+func (h *ReminderHandler) toResponse(r *models.Reminder, medicineName string) reminderResponse {
 	return reminderResponse{
-		ID:         r.ID,
-		MedicineID: r.MedicineID,
-		Time:       r.Time,
-		Enabled:    r.Enabled,
-		CreatedAt:  r.CreatedAt.Format(http.TimeFormat),
-		UpdatedAt:  r.UpdatedAt.Format(http.TimeFormat),
+		ID:           r.ID,
+		UserID:       r.UserID,
+		MedicineID:   r.MedicineID,
+		MedicineName: medicineName,
+		Time:         r.Time,
+		Enabled:      r.Enabled,
+		CreatedBy:    r.CreatedBy,
+		CreatedAt:    r.CreatedAt.Format(http.TimeFormat),
+		UpdatedAt:    r.UpdatedAt.Format(http.TimeFormat),
 	}
 }

@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { login } from '../services/api'
-import { setToken } from '../services/auth'
+import { setToken, setUser } from '../services/auth'
 
 const router = useRouter()
 const email = ref('')
@@ -16,7 +16,8 @@ async function submit() {
   try {
     const res = await login({ email: email.value, password: password.value })
     setToken(res.access_token)
-    router.push('/medicines')
+    setUser(res.user)
+    router.push(res.user.is_old ? '/reminders' : '/medicines')
   } catch (e: any) {
     error.value = e.message || '登录失败'
   } finally {

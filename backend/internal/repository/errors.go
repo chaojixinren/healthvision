@@ -9,6 +9,7 @@ import (
 
 var (
 	ErrUserNotFound = errors.New("user not found")
+	ErrNotFound     = errors.New("not found")
 	ErrDuplicateKey = errors.New("duplicate key")
 )
 

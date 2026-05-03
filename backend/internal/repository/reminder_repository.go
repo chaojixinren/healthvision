@@ -60,6 +60,31 @@ func (r *ReminderRepository) ListByUser(ctx context.Context, userID uint, medici
 	return reminders, total, nil
 }
 
+func (r *ReminderRepository) ListByCreator(ctx context.Context, createdBy uint, medicineID *uint, offset, limit int) ([]models.Reminder, int64, error) {
+	query := r.db.WithContext(ctx).Model(&models.Reminder{}).Where("created_by = ?", createdBy)
+
+	if medicineID != nil {
+		query = query.Where("medicine_id = ?", *medicineID)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var reminders []models.Reminder
+	err := query.
+		Order("time ASC").
+		Offset(offset).
+		Limit(limit).
+		Find(&reminders).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return reminders, total, nil
+}
+
 func (r *ReminderRepository) Update(ctx context.Context, reminder *models.Reminder) error {
 	return r.db.WithContext(ctx).Save(reminder).Error
 }

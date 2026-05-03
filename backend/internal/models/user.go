@@ -10,6 +10,7 @@ type User struct {
 	PasswordHash string    `gorm:"size:255;not null" json:"-"`
 	Name         string    `gorm:"size:100" json:"name"`
 	Role         string    `gorm:"size:32;not null;default:user" json:"role"`
+	IsOld        bool      `gorm:"not null;default:false" json:"is_old"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

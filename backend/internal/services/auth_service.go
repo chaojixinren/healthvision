@@ -54,7 +54,7 @@ func NewAuthService(users UserStore, cfg config.AuthConfig) *AuthService {
 	}
 }
 
-func (s *AuthService) Register(ctx context.Context, email string, password string, name string) (*models.User, TokenResult, error) {
+func (s *AuthService) Register(ctx context.Context, email string, password string, name string, isOld bool) (*models.User, TokenResult, error) {
 	email = normalizeEmail(email)
 	if _, err := s.users.FindByEmail(ctx, email); err == nil {
 		return nil, TokenResult{}, ErrEmailExists
@@ -72,6 +72,7 @@ func (s *AuthService) Register(ctx context.Context, email string, password strin
 		PasswordHash: string(hash),
 		Name:         strings.TrimSpace(name),
 		Role:         models.RoleUser,
+		IsOld:        isOld,
 	}
 	if err := s.users.Create(ctx, user); err != nil {
 		if errors.Is(err, repository.ErrDuplicateKey) {

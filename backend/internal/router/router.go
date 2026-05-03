@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHandler, reminderHandler *handlers.ReminderHandler, chatHandler *handlers.ChatHandler, authMiddleware gin.HandlerFunc) *gin.Engine {
+func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHandler, reminderHandler *handlers.ReminderHandler, chatHandler *handlers.ChatHandler, bindingHandler *handlers.BindingHandler, authMiddleware gin.HandlerFunc) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
@@ -42,6 +42,14 @@ func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHa
 			protected.GET("/chat/conversations", chatHandler.ListConversations)
 			protected.POST("/chat/messages", chatHandler.GetMessages)
 			protected.POST("/chat/delete", chatHandler.DeleteConversation)
+
+			protected.GET("/users/search", bindingHandler.SearchUsers)
+			protected.PUT("/users/me/identity", bindingHandler.ChangeIdentity)
+
+			protected.POST("/bindings", bindingHandler.Create)
+			protected.GET("/bindings", bindingHandler.List)
+			protected.PUT("/bindings/:id", bindingHandler.Respond)
+			protected.DELETE("/bindings/:id", bindingHandler.Delete)
 		}
 	}
 

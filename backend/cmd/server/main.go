@@ -49,8 +49,10 @@ func main() {
 	medicineService := services.NewMedicineService(medicineRepo, reminderRepo)
 	medicineHandler := handlers.NewMedicineHandler(medicineService)
 
-	reminderService := services.NewReminderService(reminderRepo, medicineRepo)
-	reminderHandler := handlers.NewReminderHandler(reminderService)
+	bindingRepo := repository.NewBindingRepository(db)
+
+	reminderService := services.NewReminderService(reminderRepo, medicineRepo, bindingRepo)
+	reminderHandler := handlers.NewReminderHandler(reminderService, medicineRepo)
 
 	llm := agentmodel.NewOpenAI(agentmodel.OpenAIConfig{
 		Name:    cfg.LLM.ModelName,
@@ -60,7 +62,10 @@ func main() {
 	chatService := services.NewChatService(db, llm, "你是一个健康助手，帮助用户管理药品和用药提醒。")
 	chatHandler := handlers.NewChatHandler(chatService)
 
-	engine := router.New(authHandler, medicineHandler, reminderHandler, chatHandler, authMiddleware)
+	bindingService := services.NewBindingService(bindingRepo, userRepo)
+	bindingHandler := handlers.NewBindingHandler(bindingService)
+
+	engine := router.New(authHandler, medicineHandler, reminderHandler, chatHandler, bindingHandler, authMiddleware)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           engine,

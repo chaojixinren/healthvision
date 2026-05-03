@@ -35,6 +35,17 @@ func (r *MedicineRepository) FindByID(ctx context.Context, id uint, userID uint)
 	return &medicine, nil
 }
 
+func (r *MedicineRepository) FindByIDAny(ctx context.Context, id uint) (*models.Medicine, error) {
+	var medicine models.Medicine
+	err := wrapMedicineNotFound(r.db.WithContext(ctx).
+		First(&medicine, id).
+		Error)
+	if err != nil {
+		return nil, err
+	}
+	return &medicine, nil
+}
+
 func (r *MedicineRepository) ListByUser(ctx context.Context, userID uint, offset, limit int) ([]models.Medicine, int64, error) {
 	var total int64
 	err := r.db.WithContext(ctx).

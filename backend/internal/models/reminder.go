@@ -8,6 +8,7 @@ type Reminder struct {
 	MedicineID uint      `gorm:"not null;index" json:"medicine_id"`
 	Time       string    `gorm:"size:5;not null" json:"time"`
 	Enabled    bool      `gorm:"not null;default:true" json:"enabled"`
+	CreatedBy  uint      `gorm:"not null;default:0" json:"created_by"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }

@@ -22,7 +22,8 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.error || body.message || `Request failed: ${res.status}`)
+    const message = body?.error?.message || body?.message || `Request failed: ${res.status}`
+    throw new Error(message)
   }
 
   return res.json()
@@ -40,6 +41,7 @@ export interface User {
   id: number
   name: string
   email: string
+  is_old: boolean
   created_at: string
 }
 
@@ -48,7 +50,7 @@ export interface AuthResponse {
   user: User
 }
 
-export function register(data: { name: string; email: string; password: string }): Promise<AuthResponse> {
+export function register(data: { name: string; email: string; password: string; is_old: boolean }): Promise<AuthResponse> {
   return post<AuthResponse>('/users', data)
 }
 
@@ -110,9 +112,12 @@ export function deleteMedicine(id: number): Promise<void> {
 
 export interface Reminder {
   id: number
+  user_id: number
   medicine_id: number
+  medicine_name: string
   time: string
   enabled: boolean
+  created_by: number
   created_at: string
   updated_at: string
 }
@@ -128,7 +133,7 @@ export function listReminders(medicineID?: number, page = 1, perPage = 50): Prom
   return get<ListRemindersResponse>(`/reminders?${params}`)
 }
 
-export function createReminder(data: { medicine_id: number; time: string }): Promise<Reminder> {
+export function createReminder(data: { medicine_id: number; time: string; target_user_id?: number }): Promise<Reminder> {
   return post<Reminder>('/reminders', data)
 }
 
@@ -170,4 +175,44 @@ export function getMessages(conversationID: number): Promise<{ data: ChatMessage
 
 export function deleteConversation(id: number): Promise<void> {
   return post<void>('/chat/delete', { conversation_id: id })
+}
+
+// --- Bindings ---
+
+export interface Binding {
+  id: number
+  elder_id: number
+  child_id: number
+  status: 'pending' | 'accepted' | 'rejected'
+  created_at: string
+  updated_at: string
+  elder?: User
+  child?: User
+}
+
+export function searchUsers(q: string): Promise<{ users: User[] }> {
+  return get<{ users: User[] }>(`/users/search?q=${encodeURIComponent(q)}`)
+}
+
+export function createBinding(to_email: string): Promise<{ binding: Binding }> {
+  return post<{ binding: Binding }>('/bindings', { to_email })
+}
+
+export function listBindings(): Promise<{ bindings: Binding[] }> {
+  return get<{ bindings: Binding[] }>('/bindings')
+}
+
+export function respondBinding(id: number, accept: boolean): Promise<{ binding: Binding }> {
+  return request<{ binding: Binding }>(`/bindings/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ accept }),
+  })
+}
+
+export function deleteBinding(id: number): Promise<{ message: string }> {
+  return request<{ message: string }>(`/bindings/${id}`, { method: 'DELETE' })
+}
+
+export function changeIdentity(): Promise<{ user: User; message: string }> {
+  return request<{ user: User; message: string }>('/users/me/identity', { method: 'PUT' })
 }

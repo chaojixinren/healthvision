@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
-import { isAuthenticated } from './services/auth'
+import { isAuthenticated, isOld } from './services/auth'
 import { ref, computed } from 'vue'
 
 const router = useRouter()
 const route = useRoute()
 const authenticated = ref(isAuthenticated())
+const elderly = ref(isOld())
 
 const isLanding = computed(() => route.path === '/')
 
 router.afterEach(() => {
   authenticated.value = isAuthenticated()
+  elderly.value = isOld()
 })
 </script>
 
@@ -19,10 +21,14 @@ router.afterEach(() => {
     <div class="container navbar-inner" :class="{ centered: authenticated }">
       <router-link v-if="!authenticated" to="/" class="logo">HealthVision</router-link>
       <nav class="nav-links">
-        <template v-if="authenticated">
+        <template v-if="authenticated && !elderly">
           <router-link to="/medicines">药品管理</router-link>
           <router-link to="/reminders">用药提醒</router-link>
           <router-link to="/chat">智能问诊</router-link>
+          <router-link to="/profile">个人中心</router-link>
+        </template>
+        <template v-else-if="authenticated && elderly">
+          <router-link to="/reminders">用药提醒</router-link>
           <router-link to="/profile">个人中心</router-link>
         </template>
         <template v-else>

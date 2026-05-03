@@ -1,42 +1,74 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
+import { isOld, getUser } from '../services/auth'
 import {
   listMedicines,
   listReminders,
+  listBindings,
   createReminder,
   updateReminder,
   deleteReminder,
   type Medicine,
   type Reminder,
+  type Binding,
 } from '../services/api'
 
 const medicines = ref<Medicine[]>([])
 const reminders = ref<Reminder[]>([])
+const bindings = ref<Binding[]>([])
 const loading = ref(true)
 const error = ref('')
 const showForm = ref(false)
 const editingId = ref<number | null>(null)
+const elderly = ref(isOld())
 
 const form = ref({
   medicine_id: 0,
   time: '08:00',
+  target_user_id: 0,
 })
 
-function medicineName(id: number): string {
-  return medicines.value.find((m) => m.id === id)?.name ?? '未知药品'
-}
+// only children can create reminders
+const canCreate = computed(() => !elderly.value)
+
+// bound elders that the child can set reminders for
+const targetUsers = computed(() => {
+  const currentUser = getUser()
+  if (!currentUser) return []
+  if (elderly.value) return []
+  return bindings.value
+    .filter((b) => b.status === 'accepted')
+    .map((b) => ({
+      id: b.elder_id,
+      name: b.elder?.name || '老人用户',
+      email: b.elder?.email || '',
+    }))
+})
 
 function medicineNotes(id: number): string {
   return medicines.value.find((m) => m.id === id)?.notes ?? ''
+}
+
+function targetUserName(id: number): string {
+  return targetUsers.value.find((u) => u.id === id)?.name ?? ''
+}
+
+function creatorName(createdBy: number): string {
+  const currentUser = getUser()
+  if (createdBy === currentUser?.id) return currentUser.name
+  // try to find in bindings
+  const b = bindings.value.find((b) => b.child_id === createdBy)
+  return b?.child?.name || '家人'
 }
 
 async function fetchData() {
   loading.value = true
   error.value = ''
   try {
-    const [mRes, rRes] = await Promise.all([listMedicines(), listReminders()])
+    const [mRes, rRes, bRes] = await Promise.all([listMedicines(), listReminders(), listBindings()])
     medicines.value = mRes.data
     reminders.value = rRes.data
+    bindings.value = bRes.bindings || []
   } catch (e: any) {
     error.value = e.message || '加载失败'
   } finally {
@@ -46,13 +78,18 @@ async function fetchData() {
 
 function openCreate() {
   editingId.value = null
-  form.value = { medicine_id: medicines.value[0]?.id ?? 0, time: '08:00' }
+  const defaultTarget = targetUsers.value[0]?.id ?? 0
+  form.value = {
+    medicine_id: medicines.value[0]?.id ?? 0,
+    time: '08:00',
+    target_user_id: defaultTarget,
+  }
   showForm.value = true
 }
 
 function openEdit(r: Reminder) {
   editingId.value = r.id
-  form.value = { medicine_id: r.medicine_id, time: r.time }
+  form.value = { medicine_id: r.medicine_id, time: r.time, target_user_id: r.user_id }
   showForm.value = true
 }
 
@@ -66,7 +103,11 @@ async function submitForm() {
     if (editingId.value !== null) {
       await updateReminder(editingId.value, { time: form.value.time, enabled: true })
     } else {
-      await createReminder(form.value)
+      await createReminder({
+        medicine_id: form.value.medicine_id,
+        time: form.value.time,
+        target_user_id: form.value.target_user_id || undefined,
+      })
     }
     showForm.value = false
     await fetchData()
@@ -78,7 +119,7 @@ async function submitForm() {
 async function toggle(reminder: Reminder) {
   try {
     await updateReminder(reminder.id, { time: reminder.time, enabled: !reminder.enabled })
-    await fetchData()
+    reminder.enabled = !reminder.enabled
   } catch (e: any) {
     error.value = e.message || '操作失败'
   }
@@ -88,7 +129,7 @@ async function remove(id: number) {
   if (!confirm('确定要删除这个提醒吗？')) return
   try {
     await deleteReminder(id)
-    await fetchData()
+    reminders.value = reminders.value.filter(r => r.id !== id)
   } catch (e: any) {
     error.value = e.message || '删除失败'
   }
@@ -101,21 +142,28 @@ onMounted(fetchData)
   <div class="container reminders-page">
     <div class="header-row">
       <h1>用药提醒</h1>
-      <button class="btn-primary" @click="openCreate">+ 添加提醒</button>
+      <button v-if="canCreate" class="btn-primary" @click="openCreate">+ 添加提醒</button>
     </div>
 
     <div v-if="error" class="error-banner">{{ error }}</div>
     <div v-if="loading" class="loading">加载中...</div>
 
     <div v-else-if="reminders.length === 0" class="empty">
-      暂无提醒，点击上方按钮添加
+      <template v-if="canCreate">暂无提醒，点击上方按钮添加</template>
+      <template v-else>暂无提醒，等待子女设置</template>
     </div>
 
     <div v-else class="reminder-list">
       <div v-for="r in reminders" :key="r.id" class="card reminder-card">
         <div class="reminder-left">
-          <div class="medicine-label">{{ medicineName(r.medicine_id) }}</div>
+          <div class="medicine-label">{{ r.medicine_name }}</div>
           <div v-if="medicineNotes(r.medicine_id)" class="medicine-notes">{{ medicineNotes(r.medicine_id) }}</div>
+          <div v-if="canCreate && targetUserName(r.user_id)" class="target-label">
+            为：{{ targetUserName(r.user_id) }}
+          </div>
+          <div v-if="elderly && r.created_by !== r.user_id" class="target-label created-by">
+            由 {{ creatorName(r.created_by) }} 设置
+          </div>
           <div class="time">{{ r.time }}</div>
         </div>
         <div class="reminder-right">
@@ -134,6 +182,15 @@ onMounted(fetchData)
       <div class="card-lg modal">
         <h2>{{ editingId !== null ? '编辑提醒' : '添加提醒' }}</h2>
         <form @submit.prevent="submitForm">
+          <div v-if="canCreate && targetUsers.length > 0" class="field">
+            <label>为谁设置</label>
+            <select v-model="form.target_user_id">
+              <option :value="0">自己</option>
+              <option v-for="u in targetUsers" :key="u.id" :value="u.id">
+                {{ u.name }}（{{ u.email }}）
+              </option>
+            </select>
+          </div>
           <div v-if="editingId === null" class="field">
             <label>药品 *</label>
             <select v-model="form.medicine_id" required>
@@ -203,7 +260,8 @@ onMounted(fetchData)
 .reminder-left {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .medicine-label {
@@ -221,6 +279,19 @@ onMounted(fetchData)
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.target-label {
+  font-size: 0.6875rem;
+  color: #1565c0;
+  background: #e3f2fd;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+}
+
+.target-label.created-by {
+  color: #e65100;
+  background: #fff3e0;
 }
 
 .time {

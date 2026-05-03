@@ -19,6 +19,7 @@ type registerRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
 	Name     string `json:"name" binding:"omitempty,max=100"`
+	IsOld    bool   `json:"is_old"`
 }
 
 type loginRequest struct {
@@ -31,6 +32,7 @@ type userResponse struct {
 	Email     string `json:"email"`
 	Name      string `json:"name"`
 	Role      string `json:"role"`
+	IsOld     bool   `json:"is_old"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -57,7 +59,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	user, token, err := h.auth.Register(c.Request.Context(), req.Email, req.Password, req.Name)
+	user, token, err := h.auth.Register(c.Request.Context(), req.Email, req.Password, req.Name, req.IsOld)
 	if errors.Is(err, services.ErrEmailExists) {
 		httputil.ErrorJSON(c, http.StatusConflict, "email_exists", "email already exists")
 		return
@@ -115,6 +117,7 @@ func toUserResponse(user *models.User) userResponse {
 		Email:     user.Email,
 		Name:      user.Name,
 		Role:      user.Role,
+		IsOld:     user.IsOld,
 		CreatedAt: user.CreatedAt.UTC().Format(http.TimeFormat),
 		UpdatedAt: user.UpdatedAt.UTC().Format(http.TimeFormat),
 	}
