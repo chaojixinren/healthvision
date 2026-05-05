@@ -6,7 +6,7 @@
 
 | 层 | 技术 |
 |---|---|
-| 后端 | Go · Gin · GORM · JWT · CORS |
+| 后端 | Go · Gin · GORM · JWT · CORS · Google ADK |
 | 数据库 | MySQL |
 | 前端 | Vue 3 · Vite · TypeScript · Pinia · Vue Router |
 | 移动端 | Capacitor 8 · Android |
@@ -19,7 +19,9 @@ healthvision/
 ├── backend/
 │   ├── cmd/server/main.go          # 入口
 │   ├── internal/
-│   │   ├── agent/model/            # LLM 适配层
+│   │   ├── agent/                  # ADK agent 工厂 & 指令
+│   │   │   ├── model/              # LLM 适配层（OpenAI 兼容）
+│   │   │   └── tools/              # agent 工具（药品/提醒 CRUD）
 │   │   ├── config/                 # 配置（从环境变量加载）
 │   │   ├── database/               # 数据库连接 & 自动迁移
 │   │   ├── handlers/               # 请求处理
@@ -118,6 +120,17 @@ npx cap open android
 | `LLM_MODEL` | LLM 模型名称 | `gpt-4o-mini` |
 | `LLM_BASE_URL` | LLM API 地址 | `https://api.openai.com/v1` |
 | `LLM_API_KEY` | LLM API 密钥 | — |
+| `AGENT_REQUIRE_WRITE_TOOL_CONFIRMATION` | 写操作是否需要用户人工确认（`true`/`false`） | `true` |
+
+## AI 助手
+
+AI 对话基于 Google ADK（Agent Development Kit），模型通过 runner 驱动，自动调用工具读取或修改用户数据。
+
+- **工具**：9 个，覆盖药品和提醒的 CRUD
+- **写保护**：新增/修改/删除操作需要用户在前端弹窗确认（HITL），生产环境默认启用
+- **动态指令**：每次对话自动注入当前用户的药品库和提醒快照，减少工具调用次数
+- **流式输出**：通过 SSE 推送 token，支持中途下发确认弹窗
+- **图片识别**：支持上传图片，由视觉模型分析
 
 ## API 接口
 
@@ -146,7 +159,7 @@ npx cap open android
 | `GET` | `/api/v1/reminders/:id` | 提醒详情 |
 | `PUT` | `/api/v1/reminders/:id` | 更新提醒 |
 | `DELETE` | `/api/v1/reminders/:id` | 删除提醒 |
-| `POST` | `/api/v1/chat/send` | 发送聊天消息（支持图片） |
+| `POST` | `/api/v1/chat/send` | 发送聊天消息（SSE 流式，支持图片 & 工具确认） |
 | `GET` | `/api/v1/chat/conversations` | 会话列表 |
 | `POST` | `/api/v1/chat/messages` | 获取会话消息 |
 | `POST` | `/api/v1/chat/delete` | 删除会话 |
