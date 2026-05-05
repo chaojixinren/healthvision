@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	ErrUserNotFound = errors.New("user not found")
-	ErrNotFound     = errors.New("not found")
-	ErrDuplicateKey = errors.New("duplicate key")
+	ErrUserNotFound = errors.New("用户不存在")
+	ErrNotFound     = errors.New("记录不存在")
+	ErrDuplicateKey = errors.New("数据重复")
 )
 
 func wrapNotFound(err error) error {

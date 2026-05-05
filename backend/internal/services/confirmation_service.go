@@ -13,9 +13,9 @@ import (
 const confirmationWindow = 30 * time.Minute
 
 var (
-	ErrAlreadyConfirmed  = errors.New("already confirmed")
-	ErrConfirmForbidden  = errors.New("not allowed to confirm this dose")
-	ErrNotBoundToElder   = errors.New("not bound to this elder")
+	ErrAlreadyConfirmed = errors.New("已经确认过")
+	ErrConfirmForbidden = errors.New("无权确认此服药记录")
+	ErrNotBoundToElder  = errors.New("未与该老人绑定")
 )
 
 type ConfirmationStore interface {
@@ -58,7 +58,7 @@ func (s *ConfirmationService) Generate(ctx context.Context, reminders []models.R
 			continue // already exists
 		}
 		if !errors.Is(err, repository.ErrConfirmationNotFound) {
-			return fmt.Errorf("find confirmation: %w", err)
+			return fmt.Errorf("查找确认记录失败: %w", err)
 		}
 
 		record := &models.Confirmation{
@@ -69,7 +69,7 @@ func (s *ConfirmationService) Generate(ctx context.Context, reminders []models.R
 			ScheduledTime: r.Time,
 		}
 		if err := s.store.Create(ctx, record); err != nil {
-			return fmt.Errorf("create confirmation: %w", err)
+			return fmt.Errorf("创建确认记录失败: %w", err)
 		}
 	}
 	return nil
@@ -92,7 +92,7 @@ func (s *ConfirmationService) Confirm(ctx context.Context, id uint, userID uint,
 	// check time window — parse in local timezone (ScheduledDate/Time are stored in local time)
 	scheduled, err := time.ParseInLocation("2006-01-02 15:04", c.ScheduledDate+" "+c.ScheduledTime, time.Local)
 	if err != nil {
-		return nil, fmt.Errorf("parse scheduled time: %w", err)
+		return nil, fmt.Errorf("解析排程时间失败: %w", err)
 	}
 	deadline := scheduled.Add(confirmationWindow)
 	withinWindow := time.Now().Before(deadline)
@@ -121,7 +121,7 @@ func (s *ConfirmationService) Confirm(ctx context.Context, id uint, userID uint,
 	c.ConfirmedBy = userID
 
 	if err := s.store.Update(ctx, c); err != nil {
-		return nil, fmt.Errorf("update confirmation: %w", err)
+		return nil, fmt.Errorf("更新确认记录失败: %w", err)
 	}
 	return c, nil
 }

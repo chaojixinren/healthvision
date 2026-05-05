@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrConfirmationNotFound = errors.New("confirmation not found")
+var ErrConfirmationNotFound = errors.New("确认记录不存在")
 
 type ConfirmationRepository struct {
 	db *gorm.DB

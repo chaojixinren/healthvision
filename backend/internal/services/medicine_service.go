@@ -9,7 +9,7 @@ import (
 	"healthvision/backend/internal/repository"
 )
 
-var ErrMedicineNotFound = errors.New("medicine not found")
+var ErrMedicineNotFound = errors.New("药品不存在")
 
 type MedicineStore interface {
 	Create(ctx context.Context, medicine *models.Medicine) error
@@ -41,7 +41,7 @@ func (s *MedicineService) Create(ctx context.Context, userID uint, name, imageUR
 		Notes:       notes,
 	}
 	if err := s.store.Create(ctx, medicine); err != nil {
-		return nil, fmt.Errorf("create medicine: %w", err)
+		return nil, fmt.Errorf("创建药品失败: %w", err)
 	}
 	return medicine, nil
 }
@@ -52,7 +52,7 @@ func (s *MedicineService) GetByID(ctx context.Context, id uint, userID uint) (*m
 		return nil, ErrMedicineNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get medicine: %w", err)
+		return nil, fmt.Errorf("获取药品失败: %w", err)
 	}
 	return medicine, nil
 }
@@ -74,7 +74,7 @@ func (s *MedicineService) Update(ctx context.Context, id uint, userID uint, name
 		return nil, ErrMedicineNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("find medicine: %w", err)
+		return nil, fmt.Errorf("查找药品失败: %w", err)
 	}
 
 	medicine.Name = name
@@ -83,17 +83,17 @@ func (s *MedicineService) Update(ctx context.Context, id uint, userID uint, name
 	medicine.Notes = notes
 
 	if err := s.store.Update(ctx, medicine); err != nil {
-		return nil, fmt.Errorf("update medicine: %w", err)
+		return nil, fmt.Errorf("更新药品失败: %w", err)
 	}
 	return medicine, nil
 }
 
 func (s *MedicineService) Delete(ctx context.Context, id uint, userID uint) error {
 	if err := s.reminder.DeleteByMedicineID(ctx, id, userID); err != nil {
-		return fmt.Errorf("delete reminders for medicine: %w", err)
+		return fmt.Errorf("删除药品关联提醒失败: %w", err)
 	}
 	if err := s.store.Delete(ctx, id, userID); err != nil {
-		return fmt.Errorf("delete medicine: %w", err)
+		return fmt.Errorf("删除药品失败: %w", err)
 	}
 	return nil
 }

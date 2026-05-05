@@ -78,7 +78,7 @@ func (t *reminderTools) list() (tool.Tool, error) {
 		}
 		rs, total, err := t.svc.List(ctx, uid, medFilter, page, per)
 		if err != nil {
-			return listRemindersResult{}, fmt.Errorf("list reminders: %w", err)
+			return listRemindersResult{}, fmt.Errorf("获取提醒列表失败: %w", err)
 		}
 		out := listRemindersResult{
 			Reminders: make([]reminderSummary, 0, len(rs)),
@@ -112,10 +112,10 @@ func (t *reminderTools) create() (tool.Tool, error) {
 			return reminderSummary{}, err
 		}
 		if in.MedicineID == 0 {
-			return reminderSummary{}, errors.New("medicine_id is required")
+			return reminderSummary{}, errors.New("缺少药品 ID")
 		}
 		if in.Time == "" {
-			return reminderSummary{}, errors.New("time is required (HH:MM)")
+			return reminderSummary{}, errors.New("缺少提醒时间（格式：HH:MM）")
 		}
 		target := uid
 		if in.TargetUserID != 0 {
@@ -123,7 +123,7 @@ func (t *reminderTools) create() (tool.Tool, error) {
 		}
 		r, err := t.svc.Create(ctx, uid, target, in.MedicineID, in.Time)
 		if err != nil {
-			return reminderSummary{}, fmt.Errorf("create reminder: %w", err)
+			return reminderSummary{}, fmt.Errorf("创建提醒失败: %w", err)
 		}
 		return toReminderSummary(r), nil
 	})
@@ -151,11 +151,11 @@ func (t *reminderTools) update() (tool.Tool, error) {
 			return reminderSummary{}, err
 		}
 		if in.ID == 0 {
-			return reminderSummary{}, errors.New("id is required")
+			return reminderSummary{}, errors.New("缺少提醒 ID")
 		}
 		current, err := t.svc.GetByID(ctx, in.ID, uid)
 		if err != nil {
-			return reminderSummary{}, fmt.Errorf("load reminder: %w", err)
+			return reminderSummary{}, fmt.Errorf("加载提醒失败: %w", err)
 		}
 		newTime := pickString(in.Time, current.Time)
 		newEnabled := current.Enabled
@@ -164,7 +164,7 @@ func (t *reminderTools) update() (tool.Tool, error) {
 		}
 		updated, err := t.svc.Update(ctx, in.ID, uid, newTime, newEnabled)
 		if err != nil {
-			return reminderSummary{}, fmt.Errorf("update reminder: %w", err)
+			return reminderSummary{}, fmt.Errorf("更新提醒失败: %w", err)
 		}
 		return toReminderSummary(updated), nil
 	})
@@ -187,10 +187,10 @@ func (t *reminderTools) delete_() (tool.Tool, error) {
 			return deleteResult{}, err
 		}
 		if in.ID == 0 {
-			return deleteResult{}, errors.New("id is required")
+			return deleteResult{}, errors.New("缺少提醒 ID")
 		}
 		if err := t.svc.Delete(ctx, in.ID, uid); err != nil {
-			return deleteResult{}, fmt.Errorf("delete reminder: %w", err)
+			return deleteResult{}, fmt.Errorf("删除提醒失败: %w", err)
 		}
 		return deleteResult{Status: "deleted", ID: in.ID}, nil
 	})

@@ -27,23 +27,23 @@ func AuthRequired(parser TokenParser, users UserFinder) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString, ok := bearerToken(c.GetHeader("Authorization"))
 		if !ok {
-			httputil.Unauthorized(c, "missing or invalid authorization header")
+			httputil.Unauthorized(c, "缺少或无效的 Authorization 头")
 			return
 		}
 
 		claims, err := parser.ParseToken(tokenString)
 		if err != nil {
-			httputil.Unauthorized(c, "invalid or expired token")
+			httputil.Unauthorized(c, "令牌无效或已过期，请重新登录")
 			return
 		}
 
 		user, err := users.FindByID(c.Request.Context(), claims.UserID)
 		if errors.Is(err, repository.ErrUserNotFound) {
-			httputil.Unauthorized(c, "user no longer exists")
+			httputil.Unauthorized(c, "用户不存在")
 			return
 		}
 		if err != nil {
-			httputil.ErrorJSON(c, http.StatusInternalServerError, "auth_failed", "failed to authenticate request")
+			httputil.ErrorJSON(c, http.StatusInternalServerError, "auth_failed", "认证失败")
 			return
 		}
 

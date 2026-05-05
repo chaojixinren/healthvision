@@ -37,28 +37,28 @@ type sendRequest struct {
 func (h *ChatHandler) Send(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	var req sendRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "invalid request")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "请求无效")
 		return
 	}
 
 	hasConfirmation := req.ToolConfirmation != nil
 	if hasConfirmation {
 		if req.ConversationID == 0 {
-			httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "conversation_id is required when sending tool_confirmation")
+			httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "发送工具确认时需要 conversation_id")
 			return
 		}
 		if strings.TrimSpace(req.ToolConfirmation.ConfirmationCallID) == "" {
-			httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "tool_confirmation.confirmation_call_id is required")
+			httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "缺少工具确认 ID")
 			return
 		}
 	} else if strings.TrimSpace(req.Message) == "" {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "message is required")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "消息不能为空")
 		return
 	}
 
@@ -87,7 +87,7 @@ func (h *ChatHandler) Send(c *gin.Context) {
 
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "internal_error", "streaming unsupported")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "internal_error", "不支持流式传输")
 		return
 	}
 	c.Status(http.StatusOK)
@@ -119,7 +119,7 @@ func (h *ChatHandler) Send(c *gin.Context) {
 func (h *ChatHandler) ListConversations(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
@@ -135,7 +135,7 @@ func (h *ChatHandler) ListConversations(c *gin.Context) {
 func (h *ChatHandler) GetMessages(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
@@ -143,7 +143,7 @@ func (h *ChatHandler) GetMessages(c *gin.Context) {
 		ConversationID uint `json:"conversation_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "invalid request")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "请求无效")
 		return
 	}
 
@@ -159,7 +159,7 @@ func (h *ChatHandler) GetMessages(c *gin.Context) {
 func (h *ChatHandler) DeleteConversation(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *ChatHandler) DeleteConversation(c *gin.Context) {
 		ConversationID uint `json:"conversation_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "invalid request")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "请求无效")
 		return
 	}
 

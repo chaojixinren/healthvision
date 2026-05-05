@@ -73,7 +73,7 @@ func (t *medicineTools) list() (tool.Tool, error) {
 		}
 		ms, total, err := t.svc.List(ctx, uid, page, per)
 		if err != nil {
-			return listMedicinesResult{}, fmt.Errorf("list medicines: %w", err)
+			return listMedicinesResult{}, fmt.Errorf("获取药品列表失败: %w", err)
 		}
 		out := listMedicinesResult{
 			Medicines: make([]medicineSummary, 0, len(ms)),
@@ -104,11 +104,11 @@ func (t *medicineTools) get() (tool.Tool, error) {
 			return medicineSummary{}, err
 		}
 		if in.ID == 0 {
-			return medicineSummary{}, errors.New("id is required")
+			return medicineSummary{}, errors.New("缺少药品 ID")
 		}
 		m, err := t.svc.GetByID(ctx, in.ID, uid)
 		if err != nil {
-			return medicineSummary{}, fmt.Errorf("get medicine: %w", err)
+			return medicineSummary{}, fmt.Errorf("获取药品失败: %w", err)
 		}
 		return toMedicineSummary(m), nil
 	})
@@ -134,11 +134,11 @@ func (t *medicineTools) create() (tool.Tool, error) {
 			return medicineSummary{}, err
 		}
 		if in.Name == "" {
-			return medicineSummary{}, errors.New("name is required")
+			return medicineSummary{}, errors.New("缺少药品名称")
 		}
 		m, err := t.svc.Create(ctx, uid, in.Name, in.ImageURL, in.Description, in.Notes)
 		if err != nil {
-			return medicineSummary{}, fmt.Errorf("create medicine: %w", err)
+			return medicineSummary{}, fmt.Errorf("创建药品失败: %w", err)
 		}
 		return toMedicineSummary(m), nil
 	})
@@ -169,11 +169,11 @@ func (t *medicineTools) update() (tool.Tool, error) {
 			return medicineSummary{}, err
 		}
 		if in.ID == 0 {
-			return medicineSummary{}, errors.New("id is required")
+			return medicineSummary{}, errors.New("缺少药品 ID")
 		}
 		current, err := t.svc.GetByID(ctx, in.ID, uid)
 		if err != nil {
-			return medicineSummary{}, fmt.Errorf("load medicine: %w", err)
+			return medicineSummary{}, fmt.Errorf("加载药品失败: %w", err)
 		}
 		updated, err := t.svc.Update(
 			ctx,
@@ -185,7 +185,7 @@ func (t *medicineTools) update() (tool.Tool, error) {
 			pickString(in.Notes, current.Notes),
 		)
 		if err != nil {
-			return medicineSummary{}, fmt.Errorf("update medicine: %w", err)
+			return medicineSummary{}, fmt.Errorf("更新药品失败: %w", err)
 		}
 		return toMedicineSummary(updated), nil
 	})
@@ -213,10 +213,10 @@ func (t *medicineTools) delete_() (tool.Tool, error) {
 			return deleteResult{}, err
 		}
 		if in.ID == 0 {
-			return deleteResult{}, errors.New("id is required")
+			return deleteResult{}, errors.New("缺少药品 ID")
 		}
 		if err := t.svc.Delete(ctx, in.ID, uid); err != nil {
-			return deleteResult{}, fmt.Errorf("delete medicine: %w", err)
+			return deleteResult{}, fmt.Errorf("删除药品失败: %w", err)
 		}
 		return deleteResult{Status: "deleted", ID: in.ID}, nil
 	})

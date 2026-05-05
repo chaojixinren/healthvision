@@ -74,14 +74,14 @@ func Register(deps Deps) ([]tool.Tool, error) {
 func currentUserID(ctx tool.Context) (uint, error) {
 	raw := ctx.UserID()
 	if raw == "" {
-		return 0, errors.New("agent session missing user_id")
+		return 0, errors.New("会话中缺少用户信息")
 	}
 	id, err := strconv.ParseUint(raw, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid user_id %q in session: %w", raw, err)
+		return 0, fmt.Errorf("会话中的 user_id %q 无效: %w", raw, err)
 	}
 	if id == 0 {
-		return 0, errors.New("user_id must be greater than zero")
+		return 0, errors.New("用户 ID 无效")
 	}
 	return uint(id), nil
 }
@@ -101,7 +101,7 @@ func pickString(override, fallback string) string {
 func newTool[TArgs, TResults any](cfg functiontool.Config, fn functiontool.Func[TArgs, TResults]) (tool.Tool, error) {
 	t, err := functiontool.New(cfg, fn)
 	if err != nil {
-		return nil, fmt.Errorf("build tool %q: %w", cfg.Name, err)
+		return nil, fmt.Errorf("构建工具 %q 失败: %w", cfg.Name, err)
 	}
 	return t, nil
 }

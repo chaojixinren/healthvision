@@ -58,7 +58,7 @@ func (h *ConfirmationHandler) medicineName(ctx context.Context, medicineID uint)
 func (h *ConfirmationHandler) List(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
@@ -73,7 +73,7 @@ func (h *ConfirmationHandler) List(c *gin.Context) {
 	} else {
 		elderIDs, e := h.svc.ListBoundElderIDs(c.Request.Context(), user.ID)
 		if e != nil {
-			httputil.ErrorJSON(c, http.StatusInternalServerError, "list_failed", "failed to list bindings")
+			httputil.ErrorJSON(c, http.StatusInternalServerError, "list_failed", "获取绑定列表失败")
 			return
 		}
 		if len(elderIDs) == 0 {
@@ -91,7 +91,7 @@ func (h *ConfirmationHandler) List(c *gin.Context) {
 		}
 	}
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "list_failed", "failed to list confirmations")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "list_failed", "获取确认列表失败")
 		return
 	}
 
@@ -123,13 +123,13 @@ func (h *ConfirmationHandler) List(c *gin.Context) {
 func (h *ConfirmationHandler) Confirm(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "invalid confirmation id")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的确认 ID")
 		return
 	}
 
@@ -137,13 +137,13 @@ func (h *ConfirmationHandler) Confirm(c *gin.Context) {
 	if err != nil {
 		switch err {
 		case services.ErrAlreadyConfirmed:
-			httputil.ErrorJSON(c, http.StatusConflict, "already_confirmed", "already confirmed")
+			httputil.ErrorJSON(c, http.StatusConflict, "already_confirmed", "已经确认过")
 		case services.ErrConfirmForbidden:
-			httputil.ErrorJSON(c, http.StatusForbidden, "forbidden", "not allowed to confirm this dose")
+			httputil.ErrorJSON(c, http.StatusForbidden, "forbidden", "无权确认此服药记录")
 		case services.ErrNotBoundToElder:
-			httputil.ErrorJSON(c, http.StatusForbidden, "forbidden", "not bound to this elder")
+			httputil.ErrorJSON(c, http.StatusForbidden, "forbidden", "未与该老人绑定")
 		default:
-			httputil.ErrorJSON(c, http.StatusInternalServerError, "confirm_failed", "failed to confirm")
+			httputil.ErrorJSON(c, http.StatusInternalServerError, "confirm_failed", "确认失败")
 		}
 		return
 	}

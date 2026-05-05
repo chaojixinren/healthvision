@@ -56,13 +56,13 @@ func (h *MedicineHandler) Create(c *gin.Context) {
 
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	medicine, err := h.svc.Create(c.Request.Context(), user.ID, req.Name, req.ImageURL, req.Description, req.Notes)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "create_failed", "failed to create medicine")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "create_failed", "创建药品失败")
 		return
 	}
 
@@ -72,7 +72,7 @@ func (h *MedicineHandler) Create(c *gin.Context) {
 func (h *MedicineHandler) List(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
@@ -81,7 +81,7 @@ func (h *MedicineHandler) List(c *gin.Context) {
 
 	medicines, total, err := h.svc.List(c.Request.Context(), user.ID, page, perPage)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "list_failed", "failed to list medicines")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "list_failed", "获取药品列表失败")
 		return
 	}
 
@@ -103,23 +103,23 @@ func (h *MedicineHandler) List(c *gin.Context) {
 func (h *MedicineHandler) Get(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "invalid medicine id")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的药品 ID")
 		return
 	}
 
 	medicine, err := h.svc.GetByID(c.Request.Context(), uint(id), user.ID)
 	if err != nil {
 		if err == services.ErrMedicineNotFound {
-			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "medicine not found")
+			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "药品不存在")
 			return
 		}
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "get_failed", "failed to get medicine")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "get_failed", "获取药品失败")
 		return
 	}
 
@@ -129,13 +129,13 @@ func (h *MedicineHandler) Get(c *gin.Context) {
 func (h *MedicineHandler) Update(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "invalid medicine id")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的药品 ID")
 		return
 	}
 
@@ -148,10 +148,10 @@ func (h *MedicineHandler) Update(c *gin.Context) {
 	medicine, err := h.svc.Update(c.Request.Context(), uint(id), user.ID, req.Name, req.ImageURL, req.Description, req.Notes)
 	if err != nil {
 		if err == services.ErrMedicineNotFound {
-			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "medicine not found")
+			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "药品不存在")
 			return
 		}
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "update_failed", "failed to update medicine")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "update_failed", "更新药品失败")
 		return
 	}
 
@@ -161,18 +161,18 @@ func (h *MedicineHandler) Update(c *gin.Context) {
 func (h *MedicineHandler) Delete(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "invalid medicine id")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的药品 ID")
 		return
 	}
 
 	if err := h.svc.Delete(c.Request.Context(), uint(id), user.ID); err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "delete_failed", "failed to delete medicine")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "delete_failed", "删除药品失败")
 		return
 	}
 

@@ -31,7 +31,7 @@ type respondBindingRequest struct {
 func (h *BindingHandler) Create(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
@@ -43,15 +43,15 @@ func (h *BindingHandler) Create(c *gin.Context) {
 
 	binding, err := h.bindings.Create(c.Request.Context(), user.ID, req.ToEmail)
 	if errors.Is(err, services.ErrBindingSelf) {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "binding_self", "cannot bind to yourself")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "binding_self", "不能绑定自己")
 		return
 	}
 	if errors.Is(err, services.ErrBindingSameType) {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "binding_same_type", "can only bind between elder and child accounts")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "binding_same_type", "只能在老人和子女账户之间绑定")
 		return
 	}
 	if errors.Is(err, services.ErrBindingDuplicate) {
-		httputil.ErrorJSON(c, http.StatusConflict, "binding_duplicate", "binding already exists")
+		httputil.ErrorJSON(c, http.StatusConflict, "binding_duplicate", "绑定关系已存在")
 		return
 	}
 	if err != nil {
@@ -65,13 +65,13 @@ func (h *BindingHandler) Create(c *gin.Context) {
 func (h *BindingHandler) List(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	bindings, err := h.bindings.ListByUser(c.Request.Context(), user.ID, user.IsOld)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "list_bindings_failed", "failed to list bindings")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "list_bindings_failed", "获取绑定列表失败")
 		return
 	}
 
@@ -85,13 +85,13 @@ func (h *BindingHandler) List(c *gin.Context) {
 func (h *BindingHandler) Respond(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "invalid binding id")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的绑定 ID")
 		return
 	}
 
@@ -103,19 +103,19 @@ func (h *BindingHandler) Respond(c *gin.Context) {
 
 	binding, err := h.bindings.Respond(c.Request.Context(), user.ID, uint(id), req.Accept)
 	if errors.Is(err, services.ErrBindingNotFound) {
-		httputil.ErrorJSON(c, http.StatusNotFound, "binding_not_found", "binding not found")
+		httputil.ErrorJSON(c, http.StatusNotFound, "binding_not_found", "绑定关系不存在")
 		return
 	}
 	if errors.Is(err, services.ErrBindingNotPending) {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "binding_not_pending", "binding is not in pending status")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "binding_not_pending", "绑定不是待处理状态")
 		return
 	}
 	if errors.Is(err, services.ErrBindingNotPermitted) {
-		httputil.ErrorJSON(c, http.StatusForbidden, "not_permitted", "only the elder can accept or reject a binding")
+		httputil.ErrorJSON(c, http.StatusForbidden, "not_permitted", "只有老人本人可以接受或拒绝绑定")
 		return
 	}
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "respond_failed", "failed to respond to binding")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "respond_failed", "响应绑定失败")
 		return
 	}
 
@@ -125,71 +125,71 @@ func (h *BindingHandler) Respond(c *gin.Context) {
 func (h *BindingHandler) Delete(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "invalid binding id")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的绑定 ID")
 		return
 	}
 
 	err = h.bindings.Delete(c.Request.Context(), user.ID, uint(id))
 	if errors.Is(err, services.ErrBindingNotFound) {
-		httputil.ErrorJSON(c, http.StatusNotFound, "binding_not_found", "binding not found")
+		httputil.ErrorJSON(c, http.StatusNotFound, "binding_not_found", "绑定关系不存在")
 		return
 	}
 	if errors.Is(err, services.ErrBindingNotPermitted) {
-		httputil.ErrorJSON(c, http.StatusForbidden, "not_permitted", "not permitted to delete this binding")
+		httputil.ErrorJSON(c, http.StatusForbidden, "not_permitted", "无权删除此绑定")
 		return
 	}
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "delete_failed", "failed to delete binding")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "delete_failed", "删除绑定失败")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "binding deleted"})
+	c.JSON(http.StatusOK, gin.H{"message": "绑定已删除"})
 }
 
 func (h *BindingHandler) ChangeIdentity(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	if err := h.bindings.ChangeIdentity(c.Request.Context(), user); err != nil {
 		if errors.Is(err, services.ErrHasActiveBindings) {
-			httputil.ErrorJSON(c, http.StatusBadRequest, "has_active_bindings", "must unbind all relationships before changing identity")
+			httputil.ErrorJSON(c, http.StatusBadRequest, "has_active_bindings", "切换身份前必须先解绑所有关系")
 			return
 		}
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "identity_change_failed", "failed to change identity")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "identity_change_failed", "身份切换失败")
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"user":   toUserResponse(user),
-		"message": "identity changed successfully",
+		"message": "身份已切换",
 	})
 }
 
 func (h *BindingHandler) SearchUsers(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	query := c.Query("q")
 	if query == "" {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_request", "search query is required")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_request", "请输入搜索关键词")
 		return
 	}
 
 	users, err := h.bindings.SearchUsers(c.Request.Context(), query, user.ID)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "search_failed", "failed to search users")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "search_failed", "搜索用户失败")
 		return
 	}
 

@@ -73,7 +73,7 @@ func (h *ReminderHandler) Create(c *gin.Context) {
 
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
@@ -85,7 +85,7 @@ func (h *ReminderHandler) Create(c *gin.Context) {
 	reminder, err := h.svc.Create(c.Request.Context(), user.ID, targetUserID, req.MedicineID, req.Time)
 	if err != nil {
 		if err == services.ErrMedicineNotFound {
-			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "medicine not found")
+			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "药品不存在")
 			return
 		}
 		if err == services.ErrInvalidTime {
@@ -93,10 +93,10 @@ func (h *ReminderHandler) Create(c *gin.Context) {
 			return
 		}
 		if err == services.ErrNotBound {
-			httputil.ErrorJSON(c, http.StatusBadRequest, "not_bound", "not bound to this user")
+			httputil.ErrorJSON(c, http.StatusBadRequest, "not_bound", "未与该用户建立绑定关系")
 			return
 		}
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "create_failed", "failed to create reminder")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "create_failed", "创建提醒失败")
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *ReminderHandler) Create(c *gin.Context) {
 func (h *ReminderHandler) List(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
@@ -133,7 +133,7 @@ func (h *ReminderHandler) List(c *gin.Context) {
 		reminders, total, err = h.svc.ListByCreator(c.Request.Context(), user.ID, medicineID, page, perPage)
 	}
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "list_failed", "failed to list reminders")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "list_failed", "获取提醒列表失败")
 		return
 	}
 
@@ -164,23 +164,23 @@ func (h *ReminderHandler) List(c *gin.Context) {
 func (h *ReminderHandler) Get(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "invalid reminder id")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的提醒 ID")
 		return
 	}
 
 	reminder, err := h.svc.GetByID(c.Request.Context(), uint(id), user.ID)
 	if err != nil {
 		if err == services.ErrReminderNotFound {
-			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "reminder not found")
+			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "提醒不存在")
 			return
 		}
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "get_failed", "failed to get reminder")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "get_failed", "获取提醒失败")
 		return
 	}
 
@@ -191,17 +191,17 @@ func (h *ReminderHandler) Get(c *gin.Context) {
 func (h *ReminderHandler) Update(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 	if user.IsOld {
-		httputil.ErrorJSON(c, http.StatusForbidden, "forbidden", "only children can edit reminders")
+		httputil.ErrorJSON(c, http.StatusForbidden, "forbidden", "只有子女可以编辑提醒")
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "invalid reminder id")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的提醒 ID")
 		return
 	}
 
@@ -214,14 +214,14 @@ func (h *ReminderHandler) Update(c *gin.Context) {
 	reminder, err := h.svc.Update(c.Request.Context(), uint(id), user.ID, req.Time, *req.Enabled)
 	if err != nil {
 		if err == services.ErrReminderNotFound {
-			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "reminder not found")
+			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "提醒不存在")
 			return
 		}
 		if err == services.ErrInvalidTime {
 			httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_time", err.Error())
 			return
 		}
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "update_failed", "failed to update reminder")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "update_failed", "更新提醒失败")
 		return
 	}
 
@@ -232,22 +232,22 @@ func (h *ReminderHandler) Update(c *gin.Context) {
 func (h *ReminderHandler) Delete(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 	if user.IsOld {
-		httputil.ErrorJSON(c, http.StatusForbidden, "forbidden", "only children can delete reminders")
+		httputil.ErrorJSON(c, http.StatusForbidden, "forbidden", "只有子女可以删除提醒")
 		return
 	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "invalid reminder id")
+		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的提醒 ID")
 		return
 	}
 
 	if err := h.svc.Delete(c.Request.Context(), uint(id), user.ID); err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "delete_failed", "failed to delete reminder")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "delete_failed", "删除提醒失败")
 		return
 	}
 

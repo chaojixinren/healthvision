@@ -17,9 +17,9 @@ import (
 )
 
 var (
-	ErrEmailExists        = errors.New("email already exists")
-	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrInvalidToken       = errors.New("invalid token")
+	ErrEmailExists        = errors.New("该邮箱已被注册")
+	ErrInvalidCredentials = errors.New("邮箱或密码错误")
+	ErrInvalidToken       = errors.New("令牌无效，请重新登录")
 )
 
 type UserStore interface {

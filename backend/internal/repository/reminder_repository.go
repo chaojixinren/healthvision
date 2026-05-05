@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrReminderNotFound = errors.New("reminder not found")
+var ErrReminderNotFound = errors.New("提醒不存在")
 
 type ReminderRepository struct {
 	db *gorm.DB

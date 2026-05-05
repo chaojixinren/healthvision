@@ -95,13 +95,13 @@ func (s *ChatService) Send(ctx context.Context, input SendInput, cb StreamCallba
 	isConfirmation := input.ToolConfirmation != nil
 
 	if isConfirmation && convID == 0 {
-		return nil, fmt.Errorf("conversation_id is required for tool confirmation")
+		return nil, fmt.Errorf("工具确认需要提供 conversation_id")
 	}
 
 	if convID == 0 {
 		conv := &models.Conversation{UserID: userID, Title: defaultTitle}
 		if err := s.db.WithContext(ctx).Create(conv).Error; err != nil {
-			return nil, fmt.Errorf("create conversation: %w", err)
+			return nil, fmt.Errorf("创建对话失败: %w", err)
 		}
 		convID = conv.ID
 	}
@@ -109,7 +109,7 @@ func (s *ChatService) Send(ctx context.Context, input SendInput, cb StreamCallba
 	var userMsg *models.ChatMessage
 	if !isConfirmation {
 		if strings.TrimSpace(input.Message) == "" && len(input.Images) == 0 {
-			return nil, fmt.Errorf("message or images required")
+			return nil, fmt.Errorf("消息或图片不能同时为空")
 		}
 
 		imagesJSON := marshalImages(input.Images)
@@ -121,12 +121,12 @@ func (s *ChatService) Send(ctx context.Context, input SendInput, cb StreamCallba
 			Images:         imagesJSON,
 		}
 		if err := s.db.WithContext(ctx).Create(userMsg).Error; err != nil {
-			return nil, fmt.Errorf("save user message: %w", err)
+			return nil, fmt.Errorf("保存用户消息失败: %w", err)
 		}
 	}
 
 	if isConfirmation && strings.TrimSpace(input.ToolConfirmation.CallID) == "" {
-		return nil, fmt.Errorf("tool_confirmation.confirmation_call_id is required")
+		return nil, fmt.Errorf("缺少工具确认 ID")
 	}
 
 	excludeLastUser := !isConfirmation
@@ -149,7 +149,7 @@ func (s *ChatService) Send(ctx context.Context, input SendInput, cb StreamCallba
 			Content:        reply,
 		}
 		if err := s.db.WithContext(ctx).Create(aiMsg).Error; err != nil {
-			return nil, fmt.Errorf("save assistant message: %w", err)
+			return nil, fmt.Errorf("保存助手消息失败: %w", err)
 		}
 	}
 
@@ -199,10 +199,10 @@ func (s *ChatService) ensureADKSession(ctx context.Context, userID, convID uint,
 		if strings.Contains(cerr.Error(), "already exists") {
 			return sessionID, nil
 		}
-		return "", fmt.Errorf("create adk session: %w", cerr)
+		return "", fmt.Errorf("创建 ADK 会话失败: %w", cerr)
 	}
 	if err := s.replayHistory(ctx, createResp.Session, history); err != nil {
-		return "", fmt.Errorf("replay history: %w", err)
+		return "", fmt.Errorf("回放历史失败: %w", err)
 	}
 	return sessionID, nil
 }

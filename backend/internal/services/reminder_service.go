@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	ErrReminderNotFound = errors.New("reminder not found")
-	ErrInvalidTime      = errors.New("time must be in HH:MM format (00:00–23:59)")
-	ErrNotBound         = errors.New("not bound to this user")
-	ErrElderCannotCreate = errors.New("elderly users cannot create reminders for others")
+	ErrReminderNotFound  = errors.New("提醒不存在")
+	ErrInvalidTime       = errors.New("时间格式必须为 HH:MM（00:00–23:59）")
+	ErrNotBound          = errors.New("未与该用户建立绑定关系")
+	ErrElderCannotCreate = errors.New("老人用户不能为他人创建提醒")
 )
 
 var timePattern = regexp.MustCompile(`^([01]\d|2[0-3]):[0-5]\d$`)
@@ -68,7 +68,7 @@ func (s *ReminderService) Create(ctx context.Context, creatorID uint, targetUser
 		if errors.Is(err, repository.ErrMedicineNotFound) {
 			return nil, ErrMedicineNotFound
 		}
-		return nil, fmt.Errorf("lookup medicine: %w", err)
+		return nil, fmt.Errorf("查找药品失败: %w", err)
 	}
 
 	if targetUserID != creatorID {
@@ -90,7 +90,7 @@ func (s *ReminderService) Create(ctx context.Context, creatorID uint, targetUser
 		CreatedBy:  creatorID,
 	}
 	if err := s.store.Create(ctx, reminder); err != nil {
-		return nil, fmt.Errorf("create reminder: %w", err)
+		return nil, fmt.Errorf("创建提醒失败: %w", err)
 	}
 	return reminder, nil
 }
@@ -101,7 +101,7 @@ func (s *ReminderService) GetByID(ctx context.Context, id uint, userID uint) (*m
 		return nil, ErrReminderNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get reminder: %w", err)
+		return nil, fmt.Errorf("获取提醒失败: %w", err)
 	}
 	return reminder, nil
 }
@@ -138,14 +138,14 @@ func (s *ReminderService) Update(ctx context.Context, id uint, userID uint, time
 		return nil, ErrReminderNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("find reminder: %w", err)
+		return nil, fmt.Errorf("查找提醒失败: %w", err)
 	}
 
 	reminder.Time = timeStr
 	reminder.Enabled = enabled
 
 	if err := s.store.Update(ctx, reminder); err != nil {
-		return nil, fmt.Errorf("update reminder: %w", err)
+		return nil, fmt.Errorf("更新提醒失败: %w", err)
 	}
 	return reminder, nil
 }
@@ -153,7 +153,7 @@ func (s *ReminderService) Update(ctx context.Context, id uint, userID uint, time
 func (s *ReminderService) Delete(ctx context.Context, id uint, userID uint) error {
 	err := s.store.Delete(ctx, id, userID)
 	if err != nil {
-		return fmt.Errorf("delete reminder: %w", err)
+		return fmt.Errorf("删除提醒失败: %w", err)
 	}
 	return nil
 }

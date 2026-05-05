@@ -9,13 +9,13 @@ import (
 )
 
 var (
-	ErrBindingSelf         = errors.New("cannot bind to yourself")
-	ErrBindingSameType     = errors.New("can only bind between elder and child accounts")
-	ErrBindingDuplicate    = errors.New("binding already exists")
-	ErrBindingNotFound     = errors.New("binding not found")
-	ErrBindingNotPending   = errors.New("binding is not in pending status")
-	ErrBindingNotPermitted = errors.New("not permitted to modify this binding")
-	ErrHasActiveBindings   = errors.New("must unbind all relationships before changing identity")
+	ErrBindingSelf         = errors.New("不能绑定自己")
+	ErrBindingSameType     = errors.New("只能在老人和子女账户之间绑定")
+	ErrBindingDuplicate    = errors.New("绑定关系已存在")
+	ErrBindingNotFound     = errors.New("绑定关系不存在")
+	ErrBindingNotPending   = errors.New("绑定不是待处理状态")
+	ErrBindingNotPermitted = errors.New("无权修改此绑定")
+	ErrHasActiveBindings   = errors.New("切换身份前必须先解绑所有关系")
 )
 
 type BindingStore interface {
@@ -46,7 +46,7 @@ func NewBindingService(bindings BindingStore, users BindingUserStore) *BindingSe
 func (s *BindingService) Create(ctx context.Context, fromUserID uint, toEmail string) (*models.Binding, error) {
 	targetUser, err := s.users.FindByEmail(ctx, toEmail)
 	if errors.Is(err, repository.ErrUserNotFound) {
-		return nil, errors.New("target user not found")
+		return nil, errors.New("目标用户不存在")
 	}
 	if err != nil {
 		return nil, err

@@ -61,11 +61,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	user, token, err := h.auth.Register(c.Request.Context(), req.Email, req.Password, req.Name, req.IsOld)
 	if errors.Is(err, services.ErrEmailExists) {
-		httputil.ErrorJSON(c, http.StatusConflict, "email_exists", "email already exists")
+		httputil.ErrorJSON(c, http.StatusConflict, "email_exists", "该邮箱已被注册")
 		return
 	}
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "register_failed", "failed to register user")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "register_failed", "注册失败")
 		return
 	}
 
@@ -81,11 +81,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	user, token, err := h.auth.Login(c.Request.Context(), req.Email, req.Password)
 	if errors.Is(err, services.ErrInvalidCredentials) {
-		httputil.ErrorJSON(c, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
+		httputil.ErrorJSON(c, http.StatusUnauthorized, "invalid_credentials", "邮箱或密码错误")
 		return
 	}
 	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "login_failed", "failed to login")
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "login_failed", "登录失败")
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 func (h *AuthHandler) Me(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
-		httputil.Unauthorized(c, "authentication required")
+		httputil.Unauthorized(c, "请先登录")
 		return
 	}
 

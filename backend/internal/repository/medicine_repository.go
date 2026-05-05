@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrMedicineNotFound = errors.New("medicine not found")
+var ErrMedicineNotFound = errors.New("药品不存在")
 
 type MedicineRepository struct {
 	db *gorm.DB
