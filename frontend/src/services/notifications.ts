@@ -16,8 +16,8 @@ export async function ensureExactAlarms(): Promise<void> {
   if (Capacitor.getPlatform() !== 'android') return
 
   try {
-    const { granted } = await LocalNotifications.checkExactNotificationSetting()
-    if (!granted) {
+    const { exact_alarm } = await LocalNotifications.checkExactNotificationSetting()
+    if (exact_alarm !== 'granted') {
       await LocalNotifications.changeExactNotificationSetting()
     }
   } catch { /* best-effort */ }
@@ -28,11 +28,6 @@ export async function scheduleAll(reminders: Reminder[]): Promise<void> {
   if (enabled.length === 0) return
 
   const pending = await LocalNotifications.getPending()
-  const pendingReminderIds = new Set(
-    pending.notifications
-      .map((n) => n.extra?.reminder_id)
-      .filter((id): id is number => typeof id === 'number'),
-  )
 
   const now = new Date()
   const notifications: LocalNotificationSchema[] = []
