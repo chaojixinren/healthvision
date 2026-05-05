@@ -194,6 +194,10 @@ func (h *ReminderHandler) Update(c *gin.Context) {
 		httputil.Unauthorized(c, "authentication required")
 		return
 	}
+	if user.IsOld {
+		httputil.ErrorJSON(c, http.StatusForbidden, "forbidden", "only children can edit reminders")
+		return
+	}
 
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -229,6 +233,10 @@ func (h *ReminderHandler) Delete(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
 		httputil.Unauthorized(c, "authentication required")
+		return
+	}
+	if user.IsOld {
+		httputil.ErrorJSON(c, http.StatusForbidden, "forbidden", "only children can delete reminders")
 		return
 	}
 

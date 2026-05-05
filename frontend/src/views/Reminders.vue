@@ -5,22 +5,29 @@ import {
   listMedicines,
   listReminders,
   listBindings,
+  listConfirmations,
+  confirmDose,
   createReminder,
   updateReminder,
   deleteReminder,
   type Medicine,
   type Reminder,
   type Binding,
+  type Confirmation,
 } from '../services/api'
+
+const CONFIRMATION_WINDOW_MINUTES = 30
 
 const medicines = ref<Medicine[]>([])
 const reminders = ref<Reminder[]>([])
 const bindings = ref<Binding[]>([])
+const confirmations = ref<Confirmation[]>([])
 const loading = ref(true)
 const error = ref('')
 const showForm = ref(false)
 const editingId = ref<number | null>(null)
 const elderly = ref(isOld())
+const confirmingId = ref(0)
 
 const form = ref({
   medicine_id: 0,
@@ -28,10 +35,8 @@ const form = ref({
   target_user_id: 0,
 })
 
-// only children can create reminders
 const canCreate = computed(() => !elderly.value)
 
-// bound elders that the child can set reminders for
 const targetUsers = computed(() => {
   const currentUser = getUser()
   if (!currentUser) return []
@@ -56,19 +61,90 @@ function targetUserName(id: number): string {
 function creatorName(createdBy: number): string {
   const currentUser = getUser()
   if (createdBy === currentUser?.id) return currentUser.name
-  // try to find in bindings
   const b = bindings.value.find((b) => b.child_id === createdBy)
   return b?.child?.name || '家人'
 }
+
+// --- Confirmation helpers ---
+
+const confirmationByReminder = computed(() => {
+  const map = new Map<number, Confirmation>()
+  for (const c of confirmations.value) {
+    map.set(c.reminder_id, c)
+  }
+  return map
+})
+
+type ConfirmStatus = 'upcoming' | 'within_window' | 'past_window' | 'confirmed'
+
+function computeStatus(c: Confirmation): ConfirmStatus {
+  if (c.confirmed_at) return 'confirmed'
+  const [h, m] = c.scheduled_time.split(':').map(Number)
+  const scheduled = new Date()
+  scheduled.setHours(h, m, 0, 0)
+  const deadline = new Date(scheduled.getTime() + CONFIRMATION_WINDOW_MINUTES * 60 * 1000)
+  const now = new Date()
+  if (now < scheduled) return 'upcoming'
+  if (now <= deadline) return 'within_window'
+  return 'past_window'
+}
+
+// Pre-computed per-reminder status to avoid repeated calls in template
+const reminderStates = computed(() => {
+  const map = new Map<number, { confirmation: Confirmation; status: ConfirmStatus } | null>()
+  for (const r of reminders.value) {
+    const c = confirmationByReminder.value.get(r.id)
+    map.set(r.id, c ? { confirmation: c, status: computeStatus(c) } : null)
+  }
+  return map
+})
+
+function formatConfirmTime(isoStr: string): string {
+  const d = new Date(isoStr)
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+async function handleConfirm(c: Confirmation) {
+  error.value = ''
+  confirmingId.value = c.id
+  try {
+    await confirmDose(c.id)
+    c.confirmed_at = new Date().toISOString()
+    c.confirmed_by = getUser()?.id ?? 0
+  } catch (e: any) {
+    error.value = e.message || '确认失败'
+  } finally {
+    confirmingId.value = 0
+  }
+}
+
+const elderReminderIds = computed(() => {
+  if (!canCreate.value) return new Set<number>()
+  const currentUser = getUser()
+  if (!currentUser) return new Set<number>()
+  return new Set(
+    reminders.value
+      .filter((r) => r.user_id !== currentUser.id)
+      .map((r) => r.id),
+  )
+})
+
+// --- Data fetching ---
 
 async function fetchData() {
   loading.value = true
   error.value = ''
   try {
-    const [mRes, rRes, bRes] = await Promise.all([listMedicines(), listReminders(), listBindings()])
+    const [mRes, rRes, bRes, cRes] = await Promise.all([
+      listMedicines(),
+      listReminders(),
+      listBindings(),
+      listConfirmations(),
+    ])
     medicines.value = mRes.data
     reminders.value = rRes.data
     bindings.value = bRes.bindings || []
+    confirmations.value = cRes.data || []
   } catch (e: any) {
     error.value = e.message || '加载失败'
   } finally {
@@ -155,24 +231,79 @@ onMounted(fetchData)
 
     <div v-else class="reminder-list">
       <div v-for="r in reminders" :key="r.id" class="card reminder-card">
-        <div class="reminder-left">
-          <div class="medicine-label">{{ r.medicine_name }}</div>
-          <div v-if="medicineNotes(r.medicine_id)" class="medicine-notes">{{ medicineNotes(r.medicine_id) }}</div>
-          <div v-if="canCreate && targetUserName(r.user_id)" class="target-label">
-            为：{{ targetUserName(r.user_id) }}
+        <div class="reminder-main">
+          <div class="reminder-left">
+            <div class="medicine-label">{{ r.medicine_name }}</div>
+            <div v-if="medicineNotes(r.medicine_id)" class="medicine-notes">{{ medicineNotes(r.medicine_id) }}</div>
+            <div v-if="canCreate && targetUserName(r.user_id)" class="target-label">
+              为：{{ targetUserName(r.user_id) }}
+            </div>
+            <div v-if="elderly && r.created_by !== r.user_id" class="target-label created-by">
+              由 {{ creatorName(r.created_by) }} 设置
+            </div>
+            <div class="time">{{ r.time }}</div>
           </div>
-          <div v-if="elderly && r.created_by !== r.user_id" class="target-label created-by">
-            由 {{ creatorName(r.created_by) }} 设置
+          <div class="reminder-right">
+            <template v-if="canCreate">
+              <label class="toggle">
+                <input type="checkbox" :checked="r.enabled" @change="toggle(r)" />
+                <span class="toggle-label">提醒</span>
+              </label>
+              <button class="btn-outline btn-sm" @click="openEdit(r)">编辑</button>
+              <button class="btn-outline btn-sm danger" @click="remove(r.id)">删除</button>
+            </template>
+            <span v-else class="enabled-badge" :class="{ on: r.enabled }">
+              {{ r.enabled ? '已开启' : '已关闭' }}
+            </span>
           </div>
-          <div class="time">{{ r.time }}</div>
         </div>
-        <div class="reminder-right">
-          <label class="toggle">
-            <input type="checkbox" :checked="r.enabled" @change="toggle(r)" />
-            <span class="toggle-label">提醒</span>
-          </label>
-          <button class="btn-outline btn-sm" @click="openEdit(r)">编辑</button>
-          <button class="btn-outline btn-sm danger" @click="remove(r.id)">删除</button>
+
+        <!-- Confirmation status -->
+        <div
+          v-if="reminderStates.get(r.id)"
+          class="confirm-row"
+          :class="reminderStates.get(r.id)!.status"
+        >
+          <template v-if="reminderStates.get(r.id)!.status === 'confirmed'">
+            <span class="confirm-icon">&#x2705;</span>
+            <span class="confirm-text">已服 {{ formatConfirmTime(reminderStates.get(r.id)!.confirmation.confirmed_at ?? '') }}</span>
+          </template>
+          <template v-else-if="!elderly && elderReminderIds.has(r.id)">
+            <template v-if="reminderStates.get(r.id)!.status === 'within_window'">
+              <span class="confirm-icon">&#x23F3;</span>
+              <span class="confirm-text">等待中</span>
+            </template>
+            <template v-else>
+              <span class="confirm-icon">&#x274C;</span>
+              <span class="confirm-text">未服</span>
+              <button
+                class="btn-primary btn-xs"
+                :disabled="confirmingId === reminderStates.get(r.id)!.confirmation.id"
+                @click="handleConfirm(reminderStates.get(r.id)!.confirmation)"
+              >
+                {{ confirmingId === reminderStates.get(r.id)!.confirmation.id ? '...' : '确认补服' }}
+              </button>
+            </template>
+          </template>
+          <template v-else-if="elderly">
+            <template v-if="reminderStates.get(r.id)!.status === 'within_window'">
+              <button
+                class="btn-primary btn-sm"
+                :disabled="confirmingId === reminderStates.get(r.id)!.confirmation.id"
+                @click="handleConfirm(reminderStates.get(r.id)!.confirmation)"
+              >
+                {{ confirmingId === reminderStates.get(r.id)!.confirmation.id ? '确认中...' : '确认服药' }}
+              </button>
+            </template>
+            <template v-else-if="reminderStates.get(r.id)!.status === 'past_window'">
+              <span class="confirm-icon">&#x26A0;</span>
+              <span class="confirm-text muted">已超时，请联系子女</span>
+            </template>
+            <template v-else>
+              <span class="confirm-icon">&#x23F3;</span>
+              <span class="confirm-text muted">等待中</span>
+            </template>
+          </template>
         </div>
       </div>
     </div>
@@ -251,6 +382,14 @@ onMounted(fetchData)
 
 .reminder-card {
   display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.reminder-main {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -304,6 +443,7 @@ onMounted(fetchData)
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .toggle {
@@ -323,6 +463,54 @@ onMounted(fetchData)
   font-size: 0.75rem;
   color: #8a7b70;
   user-select: none;
+}
+
+.enabled-badge {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  color: #8a7b70;
+  background: var(--muted);
+}
+
+.enabled-badge.on {
+  color: var(--primary);
+  background: var(--primary-light);
+}
+
+/* ── Confirmation row ── */
+.confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+}
+
+.confirm-row.confirmed {
+  background: #f0faf4;
+}
+
+.confirm-row.past_window {
+  background: #fef9f0;
+}
+
+.confirm-icon {
+  font-size: 0.875rem;
+}
+
+.confirm-text {
+  font-weight: 500;
+}
+
+.confirm-text.muted {
+  color: #8a7b70;
+}
+
+.btn-xs {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
 }
 
 .actions .btn-sm {

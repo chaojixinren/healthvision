@@ -102,6 +102,14 @@ func (r *ReminderRepository) DeleteByMedicineID(ctx context.Context, medicineID 
 		Delete(&models.Reminder{}).Error
 }
 
+func (r *ReminderRepository) ListAllEnabled(ctx context.Context) ([]models.Reminder, error) {
+	var reminders []models.Reminder
+	err := r.db.WithContext(ctx).
+		Where("enabled = ?", true).
+		Find(&reminders).Error
+	return reminders, err
+}
+
 func wrapReminderNotFound(err error) error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrReminderNotFound

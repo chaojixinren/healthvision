@@ -145,6 +145,34 @@ export function deleteReminder(id: number): Promise<void> {
   return request<void>(`/reminders/${id}`, { method: 'DELETE' })
 }
 
+// --- Confirmations ---
+
+export interface Confirmation {
+  id: number
+  reminder_id: number
+  user_id: number
+  medicine_id: number
+  medicine_name: string
+  scheduled_date: string
+  scheduled_time: string
+  confirmed_at: string | null
+  confirmed_by: number
+  elder_name?: string
+}
+
+export interface ListConfirmationsResponse {
+  data: Confirmation[]
+}
+
+export function listConfirmations(date?: string): Promise<ListConfirmationsResponse> {
+  const params = date ? `?date=${date}` : ''
+  return get<ListConfirmationsResponse>(`/confirmations${params}`)
+}
+
+export function confirmDose(id: number): Promise<{ id: number; confirmed_at: string; confirmed_by: number }> {
+  return post<{ id: number; confirmed_at: string; confirmed_by: number }>(`/confirmations/${id}/confirm`, {})
+}
+
 // --- Chat ---
 
 export interface Conversation {

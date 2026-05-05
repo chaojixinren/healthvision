@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHandler, reminderHandler *handlers.ReminderHandler, chatHandler *handlers.ChatHandler, bindingHandler *handlers.BindingHandler, authMiddleware gin.HandlerFunc) *gin.Engine {
+func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHandler, reminderHandler *handlers.ReminderHandler, chatHandler *handlers.ChatHandler, bindingHandler *handlers.BindingHandler, confirmationHandler *handlers.ConfirmationHandler, authMiddleware gin.HandlerFunc) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(cors.New(cors.Config{
@@ -59,6 +59,9 @@ func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHa
 			protected.GET("/bindings", bindingHandler.List)
 			protected.PUT("/bindings/:id", bindingHandler.Respond)
 			protected.DELETE("/bindings/:id", bindingHandler.Delete)
+
+			protected.GET("/confirmations", confirmationHandler.List)
+			protected.POST("/confirmations/:id/confirm", confirmationHandler.Confirm)
 		}
 	}
 

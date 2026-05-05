@@ -65,7 +65,11 @@ func main() {
 	bindingService := services.NewBindingService(bindingRepo, userRepo)
 	bindingHandler := handlers.NewBindingHandler(bindingService)
 
-	engine := router.New(authHandler, medicineHandler, reminderHandler, chatHandler, bindingHandler, authMiddleware)
+	confirmationRepo := repository.NewConfirmationRepository(db)
+	confirmationService := services.NewConfirmationService(confirmationRepo, bindingRepo)
+	confirmationHandler := handlers.NewConfirmationHandler(confirmationService, medicineRepo, userRepo)
+
+	engine := router.New(authHandler, medicineHandler, reminderHandler, chatHandler, bindingHandler, confirmationHandler, authMiddleware)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           engine,
@@ -79,9 +83,33 @@ func main() {
 		}
 	}()
 
+	// Confirmation cron: generate confirmation records every 60 seconds.
+	stopCron := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				reminders, err := reminderRepo.ListAllEnabled(context.Background())
+				if err != nil {
+					log.Printf("cron: list reminders: %v", err)
+					continue
+				}
+				if err := confirmationService.Generate(context.Background(), reminders); err != nil {
+					log.Printf("cron: generate confirmations: %v", err)
+				}
+			case <-stopCron:
+				return
+			}
+		}
+	}()
+
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+
+	close(stopCron)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
