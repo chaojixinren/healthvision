@@ -31,6 +31,7 @@ services:
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       LLM_API_KEY: ${LLM_API_KEY:?err}
+      AGENT_REQUIRE_WRITE_TOOL_CONFIRMATION: "true"
     depends_on:
       mysql:
         condition: service_healthy
