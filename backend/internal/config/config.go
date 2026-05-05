@@ -16,12 +16,26 @@ type Config struct {
 	Database DatabaseConfig
 	Auth     AuthConfig
 	LLM      LLMConfig
+	Agent    AgentConfig
 }
 
 type LLMConfig struct {
 	ModelName string
 	BaseURL   string
 	APIKey    string
+}
+
+// AgentConfig holds runtime knobs for the LLM agent. The defaults are chosen
+// to be safe in production; only flip them via env vars when intentionally
+// testing in development.
+type AgentConfig struct {
+	// RequireWriteToolConfirmation controls whether the write-side tools
+	// (create/update/delete medicine and reminder) require Human-in-the-Loop
+	// confirmation. Defaults to true. Set
+	// AGENT_REQUIRE_WRITE_TOOL_CONFIRMATION=false in development to allow
+	// the agent to mutate data without an explicit user approval — useful
+	// for end-to-end smoke tests, dangerous in production.
+	RequireWriteToolConfirmation bool
 }
 
 type DatabaseConfig struct {
@@ -70,7 +84,25 @@ func Load() (Config, error) {
 			BaseURL:   getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
 			APIKey:    getenv("LLM_API_KEY", ""),
 		},
+		Agent: AgentConfig{
+			RequireWriteToolConfirmation: getenvBool("AGENT_REQUIRE_WRITE_TOOL_CONFIRMATION", true),
+		},
 	}, nil
+}
+
+// getenvBool reads a boolean env var. Recognises 1/0, true/false, yes/no,
+// on/off (case-insensitive). Returns fallback for empty or unrecognised
+// values.
+func getenvBool(key string, fallback bool) bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch v {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }
 
 func getenv(key string, fallback string) string {

@@ -10,7 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	hvagent "healthvision/backend/internal/agent"
 	agentmodel "healthvision/backend/internal/agent/model"
+	"healthvision/backend/internal/agent/tools"
 	"healthvision/backend/internal/config"
 	"healthvision/backend/internal/database"
 	"healthvision/backend/internal/handlers"
@@ -20,6 +22,8 @@ import (
 	"healthvision/backend/internal/services"
 
 	"github.com/joho/godotenv"
+	"google.golang.org/adk/runner"
+	"google.golang.org/adk/session"
 )
 
 func main() {
@@ -59,7 +63,37 @@ func main() {
 		BaseURL: cfg.LLM.BaseURL,
 		APIKey:  cfg.LLM.APIKey,
 	})
-	chatService := services.NewChatService(db, llm, "你是一个健康助手，帮助用户管理药品和用药提醒。")
+
+	agentTools, err := tools.Register(tools.Deps{
+		Medicine:                 medicineService,
+		Reminder:                 reminderService,
+		RequireWriteConfirmation: cfg.Agent.RequireWriteToolConfirmation,
+	})
+	if err != nil {
+		log.Fatalf("register agent tools: %v", err)
+	}
+	if !cfg.Agent.RequireWriteToolConfirmation {
+		log.Printf("warning: AGENT_REQUIRE_WRITE_TOOL_CONFIRMATION=false — write-side tools will execute without HITL confirmation")
+	}
+
+	instructionProvider := hvagent.NewDynamicInstruction(medicineService, reminderService)
+	rootAgent, err := hvagent.Build(llm, agentTools, instructionProvider)
+	if err != nil {
+		log.Fatalf("build agent: %v", err)
+	}
+
+	sessionService := session.InMemoryService()
+	chatRunner, err := runner.New(runner.Config{
+		AppName:           "healthvision",
+		Agent:             rootAgent,
+		SessionService:    sessionService,
+		AutoCreateSession: false,
+	})
+	if err != nil {
+		log.Fatalf("build runner: %v", err)
+	}
+
+	chatService := services.NewChatService(db, chatRunner, sessionService)
 	chatHandler := handlers.NewChatHandler(chatService)
 
 	bindingService := services.NewBindingService(bindingRepo, userRepo)

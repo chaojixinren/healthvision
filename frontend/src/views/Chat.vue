@@ -191,6 +191,39 @@ function autoResize() {
 </script>
 
 <template>
+  <Teleport to="body">
+    <div
+      v-if="store.pendingToolConfirmation"
+      class="hitl-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hitl-title"
+    >
+      <div class="hitl-modal">
+        <h3 id="hitl-title" class="hitl-title">需要确认操作</h3>
+        <p class="hitl-hint">{{ store.pendingToolConfirmation.hint || '模型请求执行一项可能修改数据的操作，请确认是否继续。' }}</p>
+        <div class="hitl-actions">
+          <button
+            type="button"
+            class="hitl-btn hitl-btn-decline"
+            :disabled="store.sending"
+            @click="store.resolveToolConfirmation(false)"
+          >
+            拒绝
+          </button>
+          <button
+            type="button"
+            class="hitl-btn hitl-btn-approve"
+            :disabled="store.sending"
+            @click="store.resolveToolConfirmation(true)"
+          >
+            同意
+          </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
   <div class="chat-page">
     <!-- Background glows -->
     <div class="bg-glow glow-1"></div>
@@ -312,6 +345,10 @@ function autoResize() {
                     <span class="dot"></span>
                   </span>
 
+                  <span v-else-if="msg.role === 'assistant' && !msg.content && store.pendingToolConfirmation && i === store.messages.length - 1" class="hitl-inline-wait">
+                    请在上方弹窗中确认或拒绝该操作。
+                  </span>
+
                   <template v-else-if="msg.role === 'user'">
                     <div v-if="msg.content" class="user-text">{{ msg.content }}</div>
                     <div v-if="msg.images" class="user-images">
@@ -376,7 +413,7 @@ function autoResize() {
             <div class="input-wrapper">
               <button
                 class="image-upload-btn"
-                :disabled="store.sending || loading"
+                :disabled="store.sending || loading || !!store.pendingToolConfirmation"
                 @click="triggerFileInput"
                 title="上传图片"
               >
@@ -391,7 +428,7 @@ function autoResize() {
                 v-model="input"
                 class="chat-input"
                 placeholder="发信息..."
-                :disabled="store.sending || loading"
+                :disabled="store.sending || loading || !!store.pendingToolConfirmation"
                 rows="1"
                 @keydown="handleKeydown"
                 @input="autoResize"
@@ -399,7 +436,7 @@ function autoResize() {
               <button
                 class="send-btn"
                 :class="{ loading: store.sending }"
-                :disabled="store.sending || (!input.trim() && images.length === 0) || loading"
+                :disabled="store.sending || (!input.trim() && images.length === 0) || loading || !!store.pendingToolConfirmation"
                 @click="handleSend"
                 title="发送"
               >
@@ -428,6 +465,82 @@ function autoResize() {
 </template>
 
 <style scoped>
+/* ── Tool confirmation modal ── */
+.hitl-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(20, 14, 10, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.hitl-modal {
+  width: 100%;
+  max-width: 420px;
+  padding: 22px 24px;
+  border-radius: 16px;
+  background: var(--card);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.hitl-title {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+
+.hitl-hint {
+  margin: 0 0 18px;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--foreground);
+}
+
+.hitl-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.hitl-btn {
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+
+.hitl-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hitl-btn-decline {
+  background: var(--btn-secondary-bg);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+
+.hitl-btn-approve {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  color: #fff;
+}
+
+.hitl-inline-wait {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
 /* ── Page & background glows ── */
 .chat-page {
   position: relative;

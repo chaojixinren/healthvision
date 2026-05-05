@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"healthvision/backend/internal/httputil"
 	"healthvision/backend/internal/services"
@@ -22,9 +23,14 @@ func NewChatHandler(svc *services.ChatService) *ChatHandler {
 }
 
 type sendRequest struct {
-	ConversationID uint     `json:"conversation_id"`
-	Message        string   `json:"message"`
+	ConversationID uint `json:"conversation_id"`
+	Message        string `json:"message"`
 	Images         []string `json:"images,omitempty"`
+	ToolConfirmation *struct {
+		ConfirmationCallID string `json:"confirmation_call_id"`
+		Confirmed          bool   `json:"confirmed"`
+		Payload            any    `json:"payload,omitempty"`
+	} `json:"tool_confirmation,omitempty"`
 }
 
 // Send processes a chat message and streams the response via SSE.
@@ -40,9 +46,34 @@ func (h *ChatHandler) Send(c *gin.Context) {
 		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "invalid request")
 		return
 	}
-	if req.Message == "" {
+
+	hasConfirmation := req.ToolConfirmation != nil
+	if hasConfirmation {
+		if req.ConversationID == 0 {
+			httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "conversation_id is required when sending tool_confirmation")
+			return
+		}
+		if strings.TrimSpace(req.ToolConfirmation.ConfirmationCallID) == "" {
+			httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "tool_confirmation.confirmation_call_id is required")
+			return
+		}
+	} else if strings.TrimSpace(req.Message) == "" {
 		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "message is required")
 		return
+	}
+
+	input := services.SendInput{
+		UserID:         user.ID,
+		ConversationID: req.ConversationID,
+		Message:        req.Message,
+		Images:         req.Images,
+	}
+	if hasConfirmation {
+		input.ToolConfirmation = &services.ToolConfirmationInput{
+			CallID:    req.ToolConfirmation.ConfirmationCallID,
+			Confirmed: req.ToolConfirmation.Confirmed,
+			Payload:   req.ToolConfirmation.Payload,
+		}
 	}
 
 	// Set SSE headers
@@ -50,8 +81,7 @@ func (h *ChatHandler) Send(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
 
-	// If new conversation, set the ID header before streaming
-	if req.ConversationID == 0 {
+	if req.ConversationID == 0 && !hasConfirmation {
 		c.Header("X-Conversation-ID", "creating")
 	}
 
@@ -63,17 +93,18 @@ func (h *ChatHandler) Send(c *gin.Context) {
 	c.Status(http.StatusOK)
 	flusher.Flush()
 
-	result, err := h.svc.Send(c.Request.Context(), services.SendInput{
-		UserID:         user.ID,
-		ConversationID: req.ConversationID,
-		Message:        req.Message,
-		Images:         req.Images,
-	}, func(token string, err error) bool {
-		if err != nil {
-			writeSSEError(c.Writer, flusher, err.Error())
+	result, err := h.svc.Send(c.Request.Context(), input, func(ev services.StreamEvent) bool {
+		if ev.Err != nil {
+			writeSSEError(c.Writer, flusher, ev.Err.Error())
 			return false
 		}
-		writeSSEToken(c.Writer, flusher, token)
+		if ev.ToolConfirmation != nil {
+			writeSSEToolConfirmation(c.Writer, flusher, ev.ToolConfirmation)
+			return true
+		}
+		if ev.Token != "" {
+			writeSSEToken(c.Writer, flusher, ev.Token)
+		}
 		return true
 	})
 	if err != nil {
@@ -81,8 +112,7 @@ func (h *ChatHandler) Send(c *gin.Context) {
 		return
 	}
 
-	// Send final event with conversation_id
-	writeSSEDone(c.Writer, flusher, result.ConversationID)
+	writeSSEDone(c.Writer, flusher, result.ConversationID, result.PendingConfirmation)
 }
 
 // ListConversations returns the user's conversations.
@@ -160,11 +190,25 @@ func writeSSEToken(w http.ResponseWriter, flusher http.Flusher, token string) {
 	flusher.Flush()
 }
 
-func writeSSEDone(w http.ResponseWriter, flusher http.Flusher, convID uint) {
+func writeSSEToolConfirmation(w http.ResponseWriter, flusher http.Flusher, p *services.ToolConfirmationPayload) {
 	data, _ := json.Marshal(map[string]any{
-		"conversation_id": convID,
-		"partial":         false,
-		"done":            true,
+		"partial": false,
+		"tool_confirmation": map[string]any{
+			"confirmation_call_id":   p.ConfirmationCallID,
+			"hint":                   p.Hint,
+			"original_function_call": p.OriginalFunctionCall,
+		},
+	})
+	fmt.Fprintf(w, "data: %s\n\n", data)
+	flusher.Flush()
+}
+
+func writeSSEDone(w http.ResponseWriter, flusher http.Flusher, convID uint, pendingConfirmation bool) {
+	data, _ := json.Marshal(map[string]any{
+		"conversation_id":       convID,
+		"partial":             false,
+		"done":                true,
+		"pending_confirmation": pendingConfirmation,
 	})
 	fmt.Fprintf(w, "data: %s\n\n", data)
 	flusher.Flush()
