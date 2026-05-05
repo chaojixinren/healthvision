@@ -1,14 +1,16 @@
 # HealthVision
 
-用药提醒平台。
+用药提醒平台，支持老人/子女账户绑定、跨用户用药提醒和 AI 健康助手。
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|---|
-| 后端 | Go · Gin · GORM · JWT |
+| 后端 | Go · Gin · GORM · JWT · CORS |
 | 数据库 | MySQL |
-| 前端 | Vue 3 · Vite · TypeScript · Vue Router |
+| 前端 | Vue 3 · Vite · TypeScript · Pinia · Vue Router |
+| 移动端 | Capacitor 8 · Android |
+| 部署 | Docker · Docker Hub |
 
 ## 项目结构
 
@@ -17,67 +19,105 @@ healthvision/
 ├── backend/
 │   ├── cmd/server/main.go          # 入口
 │   ├── internal/
-│   │   ├── config/                 # 配置
-│   │   ├── database/               # 数据库连接 & 迁移
+│   │   ├── agent/model/            # LLM 适配层
+│   │   ├── config/                 # 配置（从环境变量加载）
+│   │   ├── database/               # 数据库连接 & 自动迁移
 │   │   ├── handlers/               # 请求处理
-│   │   ├── httputil/               # HTTP 错误工具
-│   │   ├── middleware/             # JWT 鉴权中间件
+│   │   ├── middleware/             # JWT 鉴权 + CORS 中间件
 │   │   ├── models/                 # GORM 模型
 │   │   ├── repository/             # 数据访问层
 │   │   ├── router/                 # 路由注册
 │   │   └── services/               # 业务逻辑层
+│   ├── Dockerfile                  # 多阶段构建
+│   ├── docker-compose.yml          # MySQL + Backend 一键部署
 │   ├── go.mod / go.sum
 │   └── .env.example
 ├── frontend/
-│   └── src/
-│       ├── views/                  # 页面组件
-│       │   ├── Home.vue            # Landing 页
-│       │   ├── Login.vue           # 登录
-│       │   ├── Register.vue        # 注册
-│       │   ├── Dashboard.vue       # 仪表盘
-│       │   ├── Medicines.vue       # 药品管理
-│       │   └── Profile.vue         # 个人中心
-│       ├── router/                 # 前端路由
-│       ├── services/               # API 封装
-│       └── App.vue                 # 根组件
+│   ├── src/
+│   │   ├── views/                  # 页面组件
+│   │   ├── stores/                 # Pinia 状态管理
+│   │   ├── services/               # API 封装
+│   │   ├── router/                 # 前端路由
+│   │   └── App.vue                 # 根组件
+│   ├── android/                    # Capacitor Android 项目
+│   ├── capacitor.config.ts         # Capacitor 配置
+│   └── vite.config.ts              # Vite 配置（含 API 代理）
 └── docs/
-    └── 设计图.jpg
 ```
 
 ## 快速开始
 
-### 后端
+### 后端（本地开发）
 
 ```bash
 cd backend
 cp .env.example .env   # 按需修改数据库和 JWT 配置
 go mod tidy
-go run ./cmd/server
+go run ./cmd/server     # 监听 http://localhost:8080
 ```
 
-服务默认监听 `http://localhost:8080`。
-
-### 前端
+### 前端（浏览器开发）
 
 ```bash
 cd frontend
 npm install
-npm run dev
+npm run dev             # 监听 http://localhost:5173，API 代理到 8080
 ```
 
-开发服务器默认监听 `http://localhost:5173`。
+### Docker 部署（云服务器）
+
+```bash
+# 使用 docker-compose（含 MySQL）
+cd backend
+cp .env.example .env.production   # 填入真实配置
+docker compose --env-file .env.production up -d
+
+# 或单独拉取后端镜像
+docker pull chaojixinren/healthvision-backend:latest
+docker run -d --name healthvision -p 8080:8080 \
+  -e DB_DSN="user:pass@tcp(mysql:3306)/healthvision?charset=utf8mb4&parseTime=True&loc=Local" \
+  -e JWT_SECRET="..." \
+  -e LLM_API_KEY="..." \
+  chaojixinren/healthvision-backend:latest
+```
+
+### Android APK 构建
+
+```bash
+cd frontend
+
+# 1. 构建前端
+VITE_API_URL=http://你的服务器IP:8080/api/v1 npm run build
+
+# 2. 同步到 Android 项目
+npx cap sync
+
+# 3. 编译 APK
+JAVA_HOME="/path/to/jdk" ANDROID_HOME="$HOME/Library/Android/sdk" \
+  cd android && ./gradlew assembleDebug
+
+# APK 输出位置：android/app/build/outputs/apk/debug/app-debug.apk
+
+# 或用 Android Studio 打开
+npx cap open android
+```
+
+> 生产环境 `VITE_API_URL` 已配置在 `frontend/.env.production`，直接 `npm run build` 即可。
 
 ## 环境变量
 
 | 变量 | 说明 | 默认值 |
 |---|---|---|
-| `APP_ENV` | 运行环境 | `development` |
+| `APP_ENV` | 运行环境（production 时强制检查 JWT_SECRET） | `development` |
 | `PORT` | 后端端口 | `8080` |
 | `DB_DRIVER` | 数据库驱动 | `mysql` |
-| `DB_DSN` | 数据库连接串 | `user:password@tcp(127.0.0.1:3306)/healthvision?...` |
+| `DB_DSN` | 数据库连接串 | — |
 | `JWT_SECRET` | JWT 签名密钥 | — |
 | `JWT_ISSUER` | JWT 签发者 | `healthvision` |
 | `ACCESS_TOKEN_TTL` | Token 有效期 | `24h` |
+| `LLM_MODEL` | LLM 模型名称 | `gpt-4o-mini` |
+| `LLM_BASE_URL` | LLM API 地址 | `https://api.openai.com/v1` |
+| `LLM_API_KEY` | LLM API 密钥 | — |
 
 ## API 接口
 
@@ -89,45 +129,34 @@ npm run dev
 | `POST` | `/api/v1/users` | 注册 |
 | `POST` | `/api/v1/sessions` | 登录 |
 
-注册和登录返回 Bearer token，后续请求通过 Header 携带：
-
-```http
-Authorization: Bearer <access_token>
-```
-
 ### 需认证（JWT）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `GET` | `/api/v1/users/me` | 获取当前用户 |
+| `GET` | `/api/v1/users/me` | 当前用户信息 |
+| `PUT` | `/api/v1/users/me/identity` | 切换老人/子女身份 |
+| `GET` | `/api/v1/users/search?q=` | 搜索用户 |
 | `POST` | `/api/v1/medicines` | 新增药品 |
 | `GET` | `/api/v1/medicines` | 药品列表（分页） |
 | `GET` | `/api/v1/medicines/:id` | 药品详情 |
 | `PUT` | `/api/v1/medicines/:id` | 更新药品 |
 | `DELETE` | `/api/v1/medicines/:id` | 删除药品 |
 | `POST` | `/api/v1/reminders` | 新增用药提醒 |
-| `GET` | `/api/v1/reminders` | 提醒列表（支持 `?medicine_id=` 筛选） |
+| `GET` | `/api/v1/reminders` | 提醒列表 |
 | `GET` | `/api/v1/reminders/:id` | 提醒详情 |
 | `PUT` | `/api/v1/reminders/:id` | 更新提醒 |
 | `DELETE` | `/api/v1/reminders/:id` | 删除提醒 |
+| `POST` | `/api/v1/chat/send` | 发送聊天消息（支持图片） |
+| `GET` | `/api/v1/chat/conversations` | 会话列表 |
+| `POST` | `/api/v1/chat/messages` | 获取会话消息 |
+| `POST` | `/api/v1/chat/delete` | 删除会话 |
+| `POST` | `/api/v1/bindings` | 创建账户绑定 |
+| `GET` | `/api/v1/bindings` | 绑定列表 |
+| `PUT` | `/api/v1/bindings/:id` | 接受/拒绝绑定 |
+| `DELETE` | `/api/v1/bindings/:id` | 删除绑定 |
 
-### Reminder
+所有需认证的接口需携带 Header：
 
-创建/更新提醒时 `time` 字段格式为 `HH:MM`（如 `"08:30"`），范围 `00:00`～`23:59`。
-
-```json
-// POST /api/v1/reminders
-{ "medicine_id": 1, "time": "08:30" }
-
-// PUT /api/v1/reminders/:id
-{ "time": "20:00", "enabled": true }
+```http
+Authorization: Bearer <access_token>
 ```
-
----
-
-## 移动端阶段 TODO
-
-- [ ] 打包移动端（Capacitor / Cordova）
-- [ ] 集成 Capacitor Local Notifications 插件，根据 Reminder 数据注册每日重复的本地通知
-- [ ] 应用启动时从后端拉取最新 Reminder 并全量重新调度通知
-- [ ] 用户增/删/改 Reminder 后立即重新调度
