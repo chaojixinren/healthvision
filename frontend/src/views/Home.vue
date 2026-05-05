@@ -17,9 +17,7 @@ function cta() {
         <p class="hero-sub">按时用药 就是最好的治疗</p>
         <div class="hero-actions">
           <button class="btn-primary btn-lg" @click="cta">免费开始使用</button>
-          <router-link to="/login">
-            <button class="btn-primary btn-lg">已有账户？登录</button>
-          </router-link>
+          <router-link to="/login" class="btn-primary btn-lg">已有账户？登录</router-link>
         </div>
       </div>
     </section>
