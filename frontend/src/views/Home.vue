@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 
 function cta() {
-  router.push(isAuthenticated() ? '/dashboard' : '/register')
+  router.push(isAuthenticated() ? '/medicines' : '/register')
 }
 </script>
 
