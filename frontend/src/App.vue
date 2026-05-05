@@ -3,7 +3,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { isAuthenticated, isOld } from './services/auth'
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { listReminders } from './services/api'
-import { requestPermissions, scheduleAll, addListeners, removeAllListeners } from './services/notifications'
+import { requestPermissions, ensureExactAlarms, scheduleAll, addListeners, removeAllListeners } from './services/notifications'
 
 const router = useRouter()
 const route = useRoute()
@@ -22,6 +22,7 @@ onMounted(async () => {
 
   try {
     await requestPermissions()
+	    await ensureExactAlarms()
     const res = await listReminders()
     await scheduleAll(res.data)
   } catch { /* notification scheduling is best-effort */ }
