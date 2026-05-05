@@ -1,0 +1,11 @@
+.env
+.env.example
+server
+data/
+tmp/
+*.db
+*.db-shm
+*.db-wal
+Dockerfile
+.dockerignore
+docker-compose.yml
