@@ -15,6 +15,7 @@ import {
   type Binding,
   type Confirmation,
 } from '../services/api'
+import { scheduleAll } from '../services/notifications'
 
 const CONFIRMATION_WINDOW_MINUTES = 30
 
@@ -150,6 +151,7 @@ async function fetchData() {
   } finally {
     loading.value = false
   }
+  scheduleAll(reminders.value)
 }
 
 function openCreate() {

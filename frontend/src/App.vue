@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
 import { isAuthenticated, isOld } from './services/auth'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { listReminders } from './services/api'
+import { requestPermissions, scheduleAll, addListeners, removeAllListeners } from './services/notifications'
 
 const router = useRouter()
 const route = useRoute()
@@ -13,6 +15,24 @@ const isLanding = computed(() => route.path === '/')
 router.afterEach(() => {
   authenticated.value = isAuthenticated()
   elderly.value = isOld()
+})
+
+onMounted(async () => {
+  if (!isAuthenticated()) return
+
+  try {
+    await requestPermissions()
+    const res = await listReminders()
+    await scheduleAll(res.data)
+  } catch { /* notification scheduling is best-effort */ }
+
+  addListeners(() => {
+    router.push('/reminders')
+  })
+})
+
+onUnmounted(() => {
+  removeAllListeners()
 })
 
 const tabs = computed(() => {
