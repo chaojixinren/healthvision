@@ -23,6 +23,27 @@ export async function ensureExactAlarms(): Promise<void> {
   } catch { /* best-effort */ }
 }
 
+function matchesRepeat(r: Reminder, date: Date): boolean {
+  switch (r.repeat_type) {
+    case 'daily':
+    case '':
+      return true
+    case 'interval': {
+      if (!r.interval_days || r.interval_days <= 0) return true
+      const created = new Date(r.created_at)
+      const daysSince = Math.floor((date.getTime() - created.getTime()) / (1000 * 60 * 60 * 24))
+      return daysSince % r.interval_days === 0
+    }
+    case 'weekly': {
+      if (!r.weekdays) return true
+      const weekday = date.getDay()
+      return r.weekdays.split(',').map((s) => parseInt(s.trim())).includes(weekday)
+    }
+    default:
+      return true
+  }
+}
+
 export async function scheduleAll(reminders: Reminder[]): Promise<void> {
   const enabled = reminders.filter((r) => r.enabled)
   if (enabled.length === 0) return
@@ -37,6 +58,7 @@ export async function scheduleAll(reminders: Reminder[]): Promise<void> {
     for (let day = 0; day < DAYS_AHEAD; day++) {
       const at = new Date(now.getFullYear(), now.getMonth(), now.getDate() + day, h, m)
       if (at <= now) continue
+      if (!matchesRepeat(r, at)) continue
 
       notifications.push({
         id: r.id * 1000 + day,
@@ -53,7 +75,6 @@ export async function scheduleAll(reminders: Reminder[]): Promise<void> {
 
   if (notifications.length === 0) return
 
-  // Only cancel and reschedule notifications for reminders that changed
   const toCancel = pending.notifications.filter((n) => {
     const rid = n.extra?.reminder_id
     return typeof rid === 'number' && !enabled.some((r) => r.id === rid)

@@ -29,11 +29,17 @@ type reminderRequest struct {
 	MedicineID   uint   `json:"medicine_id" binding:"required"`
 	Time         string `json:"time" binding:"required"`
 	TargetUserID uint   `json:"target_user_id"`
+	RepeatType   string `json:"repeat_type"`
+	IntervalDays int    `json:"interval_days"`
+	Weekdays     string `json:"weekdays"`
 }
 
 type reminderUpdateRequest struct {
-	Time    string `json:"time" binding:"required"`
-	Enabled *bool  `json:"enabled" binding:"required"`
+	Time         string `json:"time" binding:"required"`
+	Enabled      *bool  `json:"enabled" binding:"required"`
+	RepeatType   string `json:"repeat_type"`
+	IntervalDays int    `json:"interval_days"`
+	Weekdays     string `json:"weekdays"`
 }
 
 type reminderResponse struct {
@@ -42,6 +48,9 @@ type reminderResponse struct {
 	MedicineID   uint   `json:"medicine_id"`
 	MedicineName string `json:"medicine_name"`
 	Time         string `json:"time"`
+	RepeatType   string `json:"repeat_type"`
+	IntervalDays int    `json:"interval_days"`
+	Weekdays     string `json:"weekdays"`
 	Enabled      bool   `json:"enabled"`
 	CreatedBy    uint   `json:"created_by"`
 	CreatedAt    string `json:"created_at"`
@@ -82,7 +91,7 @@ func (h *ReminderHandler) Create(c *gin.Context) {
 		targetUserID = user.ID
 	}
 
-	reminder, err := h.svc.Create(c.Request.Context(), user.ID, targetUserID, req.MedicineID, req.Time)
+	reminder, err := h.svc.Create(c.Request.Context(), user.ID, targetUserID, req.MedicineID, req.Time, req.RepeatType, req.IntervalDays, req.Weekdays)
 	if err != nil {
 		if err == services.ErrMedicineNotFound {
 			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "药品不存在")
@@ -90,6 +99,10 @@ func (h *ReminderHandler) Create(c *gin.Context) {
 		}
 		if err == services.ErrInvalidTime {
 			httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_time", err.Error())
+			return
+		}
+		if err == services.ErrInvalidRepeatType || err == services.ErrInvalidInterval || err == services.ErrInvalidWeekdays {
+			httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_repeat", err.Error())
 			return
 		}
 		if err == services.ErrNotBound {
@@ -211,7 +224,7 @@ func (h *ReminderHandler) Update(c *gin.Context) {
 		return
 	}
 
-	reminder, err := h.svc.Update(c.Request.Context(), uint(id), user.ID, req.Time, *req.Enabled)
+	reminder, err := h.svc.Update(c.Request.Context(), uint(id), user.ID, req.Time, *req.Enabled, req.RepeatType, req.IntervalDays, req.Weekdays)
 	if err != nil {
 		if err == services.ErrReminderNotFound {
 			httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "提醒不存在")
@@ -219,6 +232,10 @@ func (h *ReminderHandler) Update(c *gin.Context) {
 		}
 		if err == services.ErrInvalidTime {
 			httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_time", err.Error())
+			return
+		}
+		if err == services.ErrInvalidRepeatType || err == services.ErrInvalidInterval || err == services.ErrInvalidWeekdays {
+			httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_repeat", err.Error())
 			return
 		}
 		httputil.ErrorJSON(c, http.StatusInternalServerError, "update_failed", "更新提醒失败")
@@ -261,6 +278,9 @@ func (h *ReminderHandler) toResponse(r *models.Reminder, medicineName string) re
 		MedicineID:   r.MedicineID,
 		MedicineName: medicineName,
 		Time:         r.Time,
+		RepeatType:   r.RepeatType,
+		IntervalDays: r.IntervalDays,
+		Weekdays:     r.Weekdays,
 		Enabled:      r.Enabled,
 		CreatedBy:    r.CreatedBy,
 		CreatedAt:    r.CreatedAt.Format(http.TimeFormat),

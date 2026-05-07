@@ -110,12 +110,17 @@ export function deleteMedicine(id: number): Promise<void> {
 
 // --- Reminders ---
 
+export type RepeatType = 'daily' | 'interval' | 'weekly'
+
 export interface Reminder {
   id: number
   user_id: number
   medicine_id: number
   medicine_name: string
   time: string
+  repeat_type: RepeatType
+  interval_days: number
+  weekdays: string
   enabled: boolean
   created_by: number
   created_at: string
@@ -133,11 +138,21 @@ export function listReminders(medicineID?: number, page = 1, perPage = 50): Prom
   return get<ListRemindersResponse>(`/reminders?${params}`)
 }
 
-export function createReminder(data: { medicine_id: number; time: string; target_user_id?: number }): Promise<Reminder> {
+export function createReminder(data: {
+  medicine_id: number
+  time: string
+  target_user_id?: number
+  repeat_type?: string
+  interval_days?: number
+  weekdays?: string
+}): Promise<Reminder> {
   return post<Reminder>('/reminders', data)
 }
 
-export function updateReminder(id: number, data: { time: string; enabled: boolean }): Promise<Reminder> {
+export function updateReminder(
+  id: number,
+  data: { time: string; enabled: boolean; repeat_type?: string; interval_days?: number; weekdays?: string },
+): Promise<Reminder> {
   return request<Reminder>(`/reminders/${id}`, { method: 'PUT', body: JSON.stringify(data) })
 }
 

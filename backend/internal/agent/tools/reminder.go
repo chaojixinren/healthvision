@@ -17,12 +17,15 @@ type reminderTools struct {
 }
 
 type reminderSummary struct {
-	ID         uint   `json:"id"`
-	UserID     uint   `json:"user_id"`
-	MedicineID uint   `json:"medicine_id"`
-	Time       string `json:"time"`
-	Enabled    bool   `json:"enabled"`
-	CreatedBy  uint   `json:"created_by"`
+	ID           uint   `json:"id"`
+	UserID       uint   `json:"user_id"`
+	MedicineID   uint   `json:"medicine_id"`
+	Time         string `json:"time"`
+	RepeatType   string `json:"repeat_type"`
+	IntervalDays int    `json:"interval_days"`
+	Weekdays     string `json:"weekdays"`
+	Enabled      bool   `json:"enabled"`
+	CreatedBy    uint   `json:"created_by"`
 }
 
 func toReminderSummary(r *models.Reminder) reminderSummary {
@@ -30,12 +33,15 @@ func toReminderSummary(r *models.Reminder) reminderSummary {
 		return reminderSummary{}
 	}
 	return reminderSummary{
-		ID:         r.ID,
-		UserID:     r.UserID,
-		MedicineID: r.MedicineID,
-		Time:       r.Time,
-		Enabled:    r.Enabled,
-		CreatedBy:  r.CreatedBy,
+		ID:           r.ID,
+		UserID:       r.UserID,
+		MedicineID:   r.MedicineID,
+		Time:         r.Time,
+		RepeatType:   r.RepeatType,
+		IntervalDays: r.IntervalDays,
+		Weekdays:     r.Weekdays,
+		Enabled:      r.Enabled,
+		CreatedBy:    r.CreatedBy,
 	}
 }
 
@@ -99,12 +105,15 @@ type createReminderArgs struct {
 	MedicineID   uint   `json:"medicine_id"              jsonschema:"要提醒的药品 ID（必填，必须属于当前用户的药品库）"`
 	Time         string `json:"time"                     jsonschema:"提醒时间，24 小时制 HH:MM，例如 08:00 或 20:30"`
 	TargetUserID uint   `json:"target_user_id,omitempty" jsonschema:"可选，给绑定的老人创建提醒时填其用户 ID；省略则给当前用户自己创建"`
+	RepeatType   string `json:"repeat_type,omitempty"    jsonschema:"重复类型：daily(每天)/interval(每隔N天)/weekly(每周固定)，默认 daily"`
+	IntervalDays int    `json:"interval_days,omitempty"  jsonschema:"间隔天数，仅 repeat_type=interval 时有效，最小 2（隔天）"`
+	Weekdays     string `json:"weekdays,omitempty"       jsonschema:"星期几，仅 repeat_type=weekly 时有效，逗号分隔的 0-6（0=周日 1=周一 … 6=周六），例如 1,3,5 表示周一三五"`
 }
 
 func (t *reminderTools) create() (tool.Tool, error) {
 	return newTool(functiontool.Config{
 		Name:                "create_reminder",
-		Description:         "为某药品新建一条服药提醒。子女账户可以传 target_user_id 给已绑定的老人创建。",
+		Description:         "为某药品新建一条服药提醒。子女账户可以传 target_user_id 给已绑定的老人创建。支持 daily（每天）、interval（每隔N天，如 interval_days=2 为隔天）、weekly（每周固定星期，如 weekdays=1,3,5 为周一三五）。",
 		RequireConfirmation: t.requireConfirmation,
 	}, func(ctx tool.Context, in createReminderArgs) (reminderSummary, error) {
 		uid, err := currentUserID(ctx)
@@ -121,7 +130,7 @@ func (t *reminderTools) create() (tool.Tool, error) {
 		if in.TargetUserID != 0 {
 			target = in.TargetUserID
 		}
-		r, err := t.svc.Create(ctx, uid, target, in.MedicineID, in.Time)
+		r, err := t.svc.Create(ctx, uid, target, in.MedicineID, in.Time, in.RepeatType, in.IntervalDays, in.Weekdays)
 		if err != nil {
 			return reminderSummary{}, fmt.Errorf("创建提醒失败: %w", err)
 		}
@@ -131,19 +140,19 @@ func (t *reminderTools) create() (tool.Tool, error) {
 
 // ---- update ----
 
-// updateReminderArgs treats time and enabled as optional. If neither is
-// provided we fall back to the current values, which makes the tool tolerant
-// to partial inputs from the LLM.
 type updateReminderArgs struct {
-	ID      uint   `json:"id"                jsonschema:"提醒 ID（必填）"`
-	Time    string `json:"time,omitempty"    jsonschema:"新的时间 HH:MM；留空表示保持不变"`
-	Enabled *bool  `json:"enabled,omitempty" jsonschema:"是否启用提醒；省略表示保持不变"`
+	ID           uint   `json:"id"                       jsonschema:"提醒 ID（必填）"`
+	Time         string `json:"time,omitempty"           jsonschema:"新的时间 HH:MM；留空表示保持不变"`
+	Enabled      *bool  `json:"enabled,omitempty"        jsonschema:"是否启用提醒；省略表示保持不变"`
+	RepeatType   string `json:"repeat_type,omitempty"    jsonschema:"重复类型：daily/interval/weekly；留空表示保持不变"`
+	IntervalDays int    `json:"interval_days,omitempty"  jsonschema:"间隔天数，仅 repeat_type=interval 时有效"`
+	Weekdays     string `json:"weekdays,omitempty"       jsonschema:"星期几，仅 repeat_type=weekly 时有效"`
 }
 
 func (t *reminderTools) update() (tool.Tool, error) {
 	return newTool(functiontool.Config{
 		Name:                "update_reminder",
-		Description:         "修改提醒的时间或启用状态。仅传需要修改的字段。",
+		Description:         "修改提醒的时间、重复规则或启用状态。仅传需要修改的字段。",
 		RequireConfirmation: t.requireConfirmation,
 	}, func(ctx tool.Context, in updateReminderArgs) (reminderSummary, error) {
 		uid, err := currentUserID(ctx)
@@ -162,7 +171,20 @@ func (t *reminderTools) update() (tool.Tool, error) {
 		if in.Enabled != nil {
 			newEnabled = *in.Enabled
 		}
-		updated, err := t.svc.Update(ctx, in.ID, uid, newTime, newEnabled)
+		newRepeatType := pickString(in.RepeatType, current.RepeatType)
+		newIntervalDays := current.IntervalDays
+		if in.RepeatType == models.RepeatTypeInterval && in.IntervalDays > 0 {
+			newIntervalDays = in.IntervalDays
+		} else if in.RepeatType != "" && in.RepeatType != models.RepeatTypeInterval {
+			newIntervalDays = 0
+		}
+		newWeekdays := current.Weekdays
+		if in.RepeatType == models.RepeatTypeWeekly && in.Weekdays != "" {
+			newWeekdays = in.Weekdays
+		} else if in.RepeatType != "" && in.RepeatType != models.RepeatTypeWeekly {
+			newWeekdays = ""
+		}
+		updated, err := t.svc.Update(ctx, in.ID, uid, newTime, newEnabled, newRepeatType, newIntervalDays, newWeekdays)
 		if err != nil {
 			return reminderSummary{}, fmt.Errorf("更新提醒失败: %w", err)
 		}

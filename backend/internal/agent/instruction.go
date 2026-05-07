@@ -112,8 +112,31 @@ func appendReminderSection(b *strings.Builder, ctx context.Context, svc Reminder
 		if !r.Enabled {
 			status = "已关闭"
 		}
-		b.WriteString(fmt.Sprintf("- [提醒 ID=%d] 药品 ID=%d 时间 %s（%s）\n",
-			r.ID, r.MedicineID, r.Time, status))
+		repeat := formatRepeatLabel(r.RepeatType, r.IntervalDays, r.Weekdays)
+		b.WriteString(fmt.Sprintf("- [提醒 ID=%d] 药品 ID=%d 时间 %s %s（%s）\n",
+			r.ID, r.MedicineID, r.Time, repeat, status))
+	}
+}
+
+func formatRepeatLabel(repeatType string, intervalDays int, weekdays string) string {
+	switch repeatType {
+	case models.RepeatTypeInterval:
+		return fmt.Sprintf("（每%d天）", intervalDays)
+	case models.RepeatTypeWeekly:
+		if weekdays == "" {
+			return ""
+		}
+		labels := []string{"周日", "周一", "周二", "周三", "周四", "周五", "周六"}
+		var parts []string
+		for _, s := range strings.Split(weekdays, ",") {
+			n, err := strconv.Atoi(strings.TrimSpace(s))
+			if err == nil && n >= 0 && n <= 6 {
+				parts = append(parts, labels[n])
+			}
+		}
+		return "（" + strings.Join(parts, "、") + "）"
+	default:
+		return "（每天）"
 	}
 }
 

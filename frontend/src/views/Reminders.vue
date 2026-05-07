@@ -19,6 +19,8 @@ import { scheduleAll } from '../services/notifications'
 
 const CONFIRMATION_WINDOW_MINUTES = 30
 
+const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
 const medicines = ref<Medicine[]>([])
 const reminders = ref<Reminder[]>([])
 const bindings = ref<Binding[]>([])
@@ -34,6 +36,9 @@ const form = ref({
   medicine_id: 0,
   time: '08:00',
   target_user_id: 0,
+  repeat_type: 'daily',
+  interval_days: 2,
+  weekdays: [] as number[],
 })
 
 const canCreate = computed(() => !elderly.value)
@@ -66,6 +71,38 @@ function creatorName(createdBy: number): string {
   return b?.child?.name || '家人'
 }
 
+function repeatLabel(r: Reminder): string {
+  switch (r.repeat_type) {
+    case 'interval':
+      return `每${r.interval_days || 2}天`
+    case 'weekly': {
+      if (!r.weekdays) return ''
+      const parts = parseWeekdays(r.weekdays).map((n) => WEEKDAY_LABELS[n])
+      return parts.join('、')
+    }
+    default:
+      return ''
+  }
+}
+
+function parseWeekdays(weekdays: string): number[] {
+  if (!weekdays) return []
+  return weekdays.split(',').map((s) => parseInt(s.trim())).filter((n) => !isNaN(n) && n >= 0 && n <= 6)
+}
+
+function formatWeekdays(arr: number[]): string {
+  return [...new Set(arr)].sort((a, b) => a - b).join(',')
+}
+
+function toggleWeekday(day: number) {
+  const idx = form.value.weekdays.indexOf(day)
+  if (idx >= 0) {
+    form.value.weekdays.splice(idx, 1)
+  } else {
+    form.value.weekdays.push(day)
+  }
+}
+
 // --- Confirmation helpers ---
 
 const confirmationByReminder = computed(() => {
@@ -90,7 +127,7 @@ function computeStatus(c: Confirmation): ConfirmStatus {
   return 'past_window'
 }
 
-// Pre-computed per-reminder status to avoid repeated calls in template
+// Pre-computed per-reminder status to avoid repeated template calls.
 const reminderStates = computed(() => {
   const map = new Map<number, { confirmation: Confirmation; status: ConfirmStatus } | null>()
   for (const r of reminders.value) {
@@ -161,13 +198,23 @@ function openCreate() {
     medicine_id: medicines.value[0]?.id ?? 0,
     time: '08:00',
     target_user_id: defaultTarget,
+    repeat_type: 'daily',
+    interval_days: 2,
+    weekdays: [],
   }
   showForm.value = true
 }
 
 function openEdit(r: Reminder) {
   editingId.value = r.id
-  form.value = { medicine_id: r.medicine_id, time: r.time, target_user_id: r.user_id }
+  form.value = {
+    medicine_id: r.medicine_id,
+    time: r.time,
+    target_user_id: r.user_id,
+    repeat_type: r.repeat_type || 'daily',
+    interval_days: r.interval_days || 2,
+    weekdays: parseWeekdays(r.weekdays),
+  }
   showForm.value = true
 }
 
@@ -178,13 +225,23 @@ function closeForm() {
 async function submitForm() {
   error.value = ''
   try {
+    const repeatData = {
+      repeat_type: form.value.repeat_type,
+      interval_days: form.value.repeat_type === 'interval' ? form.value.interval_days : undefined,
+      weekdays: form.value.repeat_type === 'weekly' ? formatWeekdays(form.value.weekdays) : undefined,
+    }
     if (editingId.value !== null) {
-      await updateReminder(editingId.value, { time: form.value.time, enabled: true })
+      await updateReminder(editingId.value, {
+        time: form.value.time,
+        enabled: true,
+        ...repeatData,
+      })
     } else {
       await createReminder({
         medicine_id: form.value.medicine_id,
         time: form.value.time,
         target_user_id: form.value.target_user_id || undefined,
+        ...repeatData,
       })
     }
     showForm.value = false
@@ -196,7 +253,10 @@ async function submitForm() {
 
 async function toggle(reminder: Reminder) {
   try {
-    await updateReminder(reminder.id, { time: reminder.time, enabled: !reminder.enabled })
+    await updateReminder(reminder.id, {
+      time: reminder.time,
+      enabled: !reminder.enabled,
+    })
     reminder.enabled = !reminder.enabled
   } catch (e: any) {
     error.value = e.message || '操作失败'
@@ -207,7 +267,7 @@ async function remove(id: number) {
   if (!confirm('确定要删除这个提醒吗？')) return
   try {
     await deleteReminder(id)
-    reminders.value = reminders.value.filter(r => r.id !== id)
+    reminders.value = reminders.value.filter((r) => r.id !== id)
   } catch (e: any) {
     error.value = e.message || '删除失败'
   }
@@ -244,6 +304,7 @@ onMounted(fetchData)
               由 {{ creatorName(r.created_by) }} 设置
             </div>
             <div class="time">{{ r.time }}</div>
+            <div v-if="repeatLabel(r)" class="repeat-badge">{{ repeatLabel(r) }}</div>
           </div>
           <div class="reminder-right">
             <template v-if="canCreate">
@@ -334,6 +395,48 @@ onMounted(fetchData)
             <label>时间 *</label>
             <input type="time" v-model="form.time" required />
           </div>
+
+          <!-- Recurrence -->
+          <div class="field">
+            <label>重复规则</label>
+            <select v-model="form.repeat_type">
+              <option value="daily">每天</option>
+              <option value="interval">每隔N天</option>
+              <option value="weekly">每周固定</option>
+            </select>
+          </div>
+
+          <div v-if="form.repeat_type === 'interval'" class="field">
+            <label>间隔天数</label>
+            <div class="interval-row">
+              <span class="interval-prefix">每隔</span>
+              <input
+                type="number"
+                v-model.number="form.interval_days"
+                min="2"
+                max="365"
+                class="interval-input"
+              />
+              <span class="interval-suffix">天</span>
+            </div>
+          </div>
+
+          <div v-if="form.repeat_type === 'weekly'" class="field">
+            <label>选择星期</label>
+            <div class="weekday-grid">
+              <button
+                v-for="(label, idx) in WEEKDAY_LABELS"
+                :key="idx"
+                type="button"
+                class="weekday-chip"
+                :class="{ active: form.weekdays.includes(idx) }"
+                @click="toggleWeekday(idx)"
+              >
+                {{ label }}
+              </button>
+            </div>
+          </div>
+
           <div class="form-actions">
             <button type="button" class="btn-outline" @click="closeForm">取消</button>
             <button type="submit" class="btn-primary">保存</button>
@@ -441,6 +544,15 @@ onMounted(fetchData)
   font-weight: 600;
 }
 
+.repeat-badge {
+  font-size: 0.75rem;
+  color: var(--primary);
+  background: var(--primary-light);
+  padding: 0.2rem 0.625rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
 .reminder-right {
   display: flex;
   align-items: center;
@@ -527,6 +639,57 @@ onMounted(fetchData)
 
 .danger:hover {
   background: #fce8ec;
+}
+
+/* ── Recurrence form controls ── */
+.interval-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.interval-prefix,
+.interval-suffix {
+  font-size: 0.875rem;
+  color: #6b5b50;
+}
+
+.interval-input {
+  width: 5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.weekday-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.weekday-chip {
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: #6b5b50;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.weekday-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.weekday-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
 }
 
 /* Modal */

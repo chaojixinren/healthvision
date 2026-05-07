@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"healthvision/backend/internal/models"
@@ -41,10 +43,38 @@ func NewConfirmationService(store ConfirmationStore, bindings ConfirmationBindin
 	return &ConfirmationService{store: store, bindings: bindings}
 }
 
+// matchesRepeat checks whether the reminder should fire on the given day.
+func matchesRepeat(r models.Reminder, today time.Time) bool {
+	switch r.RepeatType {
+	case models.RepeatTypeDaily, "":
+		return true
+	case models.RepeatTypeInterval:
+		if r.IntervalDays <= 0 {
+			return true
+		}
+		daysSince := int(today.Sub(r.CreatedAt).Hours() / 24)
+		return daysSince%r.IntervalDays == 0
+	case models.RepeatTypeWeekly:
+		if r.Weekdays == "" {
+			return true
+		}
+		todayWD := strconv.Itoa(int(today.Weekday()))
+		for _, s := range strings.Split(r.Weekdays, ",") {
+			if strings.TrimSpace(s) == todayWD {
+				return true
+			}
+		}
+		return false
+	default:
+		return true
+	}
+}
+
 // Generate creates confirmation records for reminders whose time has arrived.
 func (s *ConfirmationService) Generate(ctx context.Context, reminders []models.Reminder) error {
-	today := time.Now().Format("2006-01-02")
-	now := time.Now().Format("15:04")
+	today := time.Now()
+	todayStr := today.Format("2006-01-02")
+	now := today.Format("15:04")
 
 	for _, r := range reminders {
 		if !r.Enabled {
@@ -53,7 +83,10 @@ func (s *ConfirmationService) Generate(ctx context.Context, reminders []models.R
 		if now < r.Time {
 			continue
 		}
-		_, err := s.store.FindByReminderAndDate(ctx, r.ID, today)
+		if !matchesRepeat(r, today) {
+			continue
+		}
+		_, err := s.store.FindByReminderAndDate(ctx, r.ID, todayStr)
 		if err == nil {
 			continue // already exists
 		}
@@ -65,7 +98,7 @@ func (s *ConfirmationService) Generate(ctx context.Context, reminders []models.R
 			ReminderID:    r.ID,
 			MedicineID:    r.MedicineID,
 			UserID:        r.UserID,
-			ScheduledDate: today,
+			ScheduledDate: todayStr,
 			ScheduledTime: r.Time,
 		}
 		if err := s.store.Create(ctx, record); err != nil {
@@ -89,7 +122,6 @@ func (s *ConfirmationService) Confirm(ctx context.Context, id uint, userID uint,
 		return nil, ErrAlreadyConfirmed
 	}
 
-	// check time window — parse in local timezone (ScheduledDate/Time are stored in local time)
 	scheduled, err := time.ParseInLocation("2006-01-02 15:04", c.ScheduledDate+" "+c.ScheduledTime, time.Local)
 	if err != nil {
 		return nil, fmt.Errorf("解析排程时间失败: %w", err)
@@ -98,12 +130,12 @@ func (s *ConfirmationService) Confirm(ctx context.Context, id uint, userID uint,
 	withinWindow := time.Now().Before(deadline)
 
 	if isOld {
-		// elderly: only confirm own, within window
+		// Elderly: only confirm own doses, within the time window.
 		if c.UserID != userID || !withinWindow {
 			return nil, ErrConfirmForbidden
 		}
 	} else {
-		// child: only confirm after window, for bound elder
+		// Child: only confirm for bound elders, after the window has passed.
 		if withinWindow {
 			return nil, ErrConfirmForbidden
 		}
@@ -130,7 +162,6 @@ func (s *ConfirmationService) ListByUser(ctx context.Context, userID uint, date 
 	return s.store.ListByUserAndDate(ctx, userID, date)
 }
 
-// ListBoundElderIDs returns accepted elder IDs for a child.
 func (s *ConfirmationService) ListBoundElderIDs(ctx context.Context, childID uint) ([]uint, error) {
 	if s.bindings == nil {
 		return nil, nil

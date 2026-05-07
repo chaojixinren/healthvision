@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"healthvision/backend/internal/models"
@@ -14,6 +16,9 @@ import (
 var (
 	ErrReminderNotFound  = errors.New("提醒不存在")
 	ErrInvalidTime       = errors.New("时间格式必须为 HH:MM（00:00–23:59）")
+	ErrInvalidRepeatType = errors.New("重复类型必须为 daily、interval 或 weekly")
+	ErrInvalidInterval   = errors.New("间隔天数必须为 2-365")
+	ErrInvalidWeekdays   = errors.New("星期配置格式无效")
 	ErrNotBound          = errors.New("未与该用户建立绑定关系")
 	ErrElderCannotCreate = errors.New("老人用户不能为他人创建提醒")
 )
@@ -58,8 +63,47 @@ func validateTime(t string) error {
 	return nil
 }
 
-func (s *ReminderService) Create(ctx context.Context, creatorID uint, targetUserID uint, medicineID uint, timeStr string) (*models.Reminder, error) {
+func validateRepeatConfig(repeatType string, intervalDays int, weekdays string) error {
+	switch repeatType {
+	case models.RepeatTypeDaily, "":
+		return nil
+	case models.RepeatTypeInterval:
+		if intervalDays < 2 || intervalDays > 365 {
+			return ErrInvalidInterval
+		}
+		return nil
+	case models.RepeatTypeWeekly:
+		if weekdays == "" {
+			return ErrInvalidWeekdays
+		}
+		for _, s := range strings.Split(weekdays, ",") {
+			n, err := strconv.Atoi(strings.TrimSpace(s))
+			if err != nil || n < 0 || n > 6 {
+				return ErrInvalidWeekdays
+			}
+		}
+		return nil
+	default:
+		return ErrInvalidRepeatType
+	}
+}
+
+func defaultRepeatConfig(repeatType string, intervalDays int, weekdays string) (string, int, string) {
+	if repeatType == "" {
+		repeatType = models.RepeatTypeDaily
+	}
+	if repeatType == models.RepeatTypeInterval && intervalDays == 0 {
+		intervalDays = 2
+	}
+	return repeatType, intervalDays, weekdays
+}
+
+func (s *ReminderService) Create(ctx context.Context, creatorID uint, targetUserID uint, medicineID uint, timeStr string, repeatType string, intervalDays int, weekdays string) (*models.Reminder, error) {
 	if err := validateTime(timeStr); err != nil {
+		return nil, err
+	}
+	repeatType, intervalDays, weekdays = defaultRepeatConfig(repeatType, intervalDays, weekdays)
+	if err := validateRepeatConfig(repeatType, intervalDays, weekdays); err != nil {
 		return nil, err
 	}
 
@@ -75,7 +119,6 @@ func (s *ReminderService) Create(ctx context.Context, creatorID uint, targetUser
 		if s.bindings == nil {
 			return nil, ErrNotBound
 		}
-		// creator must be a child, target must be an elder
 		binding, err := s.bindings.FindByElderAndChild(ctx, targetUserID, creatorID)
 		if err != nil || binding == nil || binding.Status != models.BindingStatusAccepted {
 			return nil, ErrNotBound
@@ -83,11 +126,14 @@ func (s *ReminderService) Create(ctx context.Context, creatorID uint, targetUser
 	}
 
 	reminder := &models.Reminder{
-		UserID:     targetUserID,
-		MedicineID: medicineID,
-		Time:       timeStr,
-		Enabled:    true,
-		CreatedBy:  creatorID,
+		UserID:       targetUserID,
+		MedicineID:   medicineID,
+		Time:         timeStr,
+		RepeatType:   repeatType,
+		IntervalDays: intervalDays,
+		Weekdays:     weekdays,
+		Enabled:      true,
+		CreatedBy:    creatorID,
 	}
 	if err := s.store.Create(ctx, reminder); err != nil {
 		return nil, fmt.Errorf("创建提醒失败: %w", err)
@@ -128,7 +174,7 @@ func (s *ReminderService) ListByCreator(ctx context.Context, createdBy uint, med
 	return s.store.ListByCreator(ctx, createdBy, medicineID, offset, perPage)
 }
 
-func (s *ReminderService) Update(ctx context.Context, id uint, userID uint, timeStr string, enabled bool) (*models.Reminder, error) {
+func (s *ReminderService) Update(ctx context.Context, id uint, userID uint, timeStr string, enabled bool, repeatType string, intervalDays int, weekdays string) (*models.Reminder, error) {
 	if err := validateTime(timeStr); err != nil {
 		return nil, err
 	}
@@ -143,6 +189,16 @@ func (s *ReminderService) Update(ctx context.Context, id uint, userID uint, time
 
 	reminder.Time = timeStr
 	reminder.Enabled = enabled
+
+	if repeatType != "" {
+		repeatType, intervalDays, weekdays = defaultRepeatConfig(repeatType, intervalDays, weekdays)
+		if err := validateRepeatConfig(repeatType, intervalDays, weekdays); err != nil {
+			return nil, err
+		}
+		reminder.RepeatType = repeatType
+		reminder.IntervalDays = intervalDays
+		reminder.Weekdays = weekdays
+	}
 
 	if err := s.store.Update(ctx, reminder); err != nil {
 		return nil, fmt.Errorf("更新提醒失败: %w", err)

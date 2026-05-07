@@ -18,5 +18,9 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 }
 
 func Migrate(db *gorm.DB) error {
-	return db.AutoMigrate(&models.User{}, &models.Medicine{}, &models.Reminder{}, &models.Conversation{}, &models.ChatMessage{}, &models.Binding{}, &models.Confirmation{})
+	if err := db.AutoMigrate(&models.User{}, &models.Medicine{}, &models.Reminder{}, &models.Conversation{}, &models.ChatMessage{}, &models.Binding{}, &models.Confirmation{}); err != nil {
+		return err
+	}
+	// Backfill default values for new reminder recurrence columns added 2026-05.
+	return db.Exec(`UPDATE reminders SET repeat_type = 'daily' WHERE repeat_type IS NULL OR repeat_type = ''`).Error
 }
