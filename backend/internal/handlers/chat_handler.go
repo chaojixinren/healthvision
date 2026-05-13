@@ -23,9 +23,9 @@ func NewChatHandler(svc *services.ChatService) *ChatHandler {
 }
 
 type sendRequest struct {
-	ConversationID uint `json:"conversation_id"`
-	Message        string `json:"message"`
-	Images         []string `json:"images,omitempty"`
+	ConversationID   uint     `json:"conversation_id"`
+	Message          string   `json:"message"`
+	Images           []string `json:"images,omitempty"`
 	ToolConfirmation *struct {
 		ConfirmationCallID string `json:"confirmation_call_id"`
 		Confirmed          bool   `json:"confirmed"`
@@ -42,8 +42,7 @@ func (h *ChatHandler) Send(c *gin.Context) {
 	}
 
 	var req sendRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "请求无效")
+	if !bindJSON(c, &req) {
 		return
 	}
 
@@ -57,8 +56,15 @@ func (h *ChatHandler) Send(c *gin.Context) {
 			httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "缺少工具确认 ID")
 			return
 		}
-	} else if strings.TrimSpace(req.Message) == "" {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "消息不能为空")
+		if len(req.ToolConfirmation.ConfirmationCallID) > 128 {
+			httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "工具确认 ID 过长")
+			return
+		}
+	} else if strings.TrimSpace(req.Message) == "" && len(req.Images) == 0 {
+		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "消息或图片不能同时为空")
+		return
+	}
+	if !validateChatMessage(c, req.Message) || !validateChatImages(c, req.Images) {
 		return
 	}
 
@@ -140,10 +146,9 @@ func (h *ChatHandler) GetMessages(c *gin.Context) {
 	}
 
 	var req struct {
-		ConversationID uint `json:"conversation_id"`
+		ConversationID uint `json:"conversation_id" binding:"required,gt=0"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "请求无效")
+	if !bindJSON(c, &req) {
 		return
 	}
 
@@ -164,10 +169,9 @@ func (h *ChatHandler) DeleteConversation(c *gin.Context) {
 	}
 
 	var req struct {
-		ConversationID uint `json:"conversation_id"`
+		ConversationID uint `json:"conversation_id" binding:"required,gt=0"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "bad_request", "请求无效")
+	if !bindJSON(c, &req) {
 		return
 	}
 
@@ -177,6 +181,22 @@ func (h *ChatHandler) DeleteConversation(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+// ClearConversations deletes all chat conversations for the current user.
+func (h *ChatHandler) ClearConversations(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		httputil.Unauthorized(c, "请先登录")
+		return
+	}
+
+	if err := h.svc.DeleteAllConversations(c.Request.Context(), user.ID); err != nil {
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "internal_error", err.Error())
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "cleared"})
 }
 
 // ---- SSE helpers ----
@@ -205,9 +225,9 @@ func writeSSEToolConfirmation(w http.ResponseWriter, flusher http.Flusher, p *se
 
 func writeSSEDone(w http.ResponseWriter, flusher http.Flusher, convID uint, pendingConfirmation bool) {
 	data, _ := json.Marshal(map[string]any{
-		"conversation_id":       convID,
-		"partial":             false,
-		"done":                true,
+		"conversation_id":      convID,
+		"partial":              false,
+		"done":                 true,
 		"pending_confirmation": pendingConfirmation,
 	})
 	fmt.Fprintf(w, "data: %s\n\n", data)

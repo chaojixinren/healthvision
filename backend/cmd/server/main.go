@@ -94,7 +94,7 @@ func main() {
 		log.Fatalf("build runner: %v", err)
 	}
 
-	chatService := services.NewChatService(db, chatRunner, sessionService)
+	chatService := services.NewChatService(db, chatRunner, sessionService, cfg.Chat)
 	chatHandler := handlers.NewChatHandler(chatService)
 
 	bindingService := services.NewBindingService(bindingRepo, userRepo)
@@ -133,6 +133,43 @@ func main() {
 				}
 				if err := confirmationService.Generate(context.Background(), reminders); err != nil {
 					log.Printf("cron: generate confirmations: %v", err)
+				}
+			case <-stopCron:
+				return
+			}
+		}
+	}()
+
+	// Auth cron: remove expired refresh tokens daily.
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := authService.DeleteExpiredRefreshTokens(context.Background(), time.Now()); err != nil {
+					log.Printf("cron: delete expired refresh tokens: %v", err)
+				}
+			case <-stopCron:
+				return
+			}
+		}
+	}()
+
+	// Chat cron: prune expired AI conversation history daily.
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				result, err := chatService.CleanupExpired(context.Background(), time.Now())
+				if err != nil {
+					log.Printf("cron: cleanup chat history: %v", err)
+					continue
+				}
+				if result.DeletedMessages > 0 || result.DeletedConversations > 0 {
+					log.Printf("cron: cleanup chat history: deleted %d messages and %d conversations", result.DeletedMessages, result.DeletedConversations)
 				}
 			case <-stopCron:
 				return

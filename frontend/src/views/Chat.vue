@@ -12,6 +12,8 @@ function renderMarkdown(text: string): string {
 }
 
 const store = useChatStore()
+const MAX_CHAT_MESSAGE_LENGTH = 4000
+const MAX_CHAT_IMAGES = 3
 
 const input = ref('')
 const images = ref<string[]>([])
@@ -96,9 +98,25 @@ async function handleDelete(conv: Conversation) {
   }
 }
 
+async function handleClearAll() {
+  if (store.conversations.length === 0) return
+  if (!confirm('确定要清空所有 AI 会话历史吗？此操作不可恢复。')) return
+  try {
+    await store.clearAllConversations()
+    closeSidebar()
+    nextTick(() => inputEl.value?.focus())
+  } catch (e: unknown) {
+    store.error = (e as Error).message || '清空失败'
+  }
+}
+
 async function handleSend() {
   const text = input.value.trim()
   if (!text && images.value.length === 0) return
+  if (text.length > MAX_CHAT_MESSAGE_LENGTH) {
+    store.error = `消息不能超过${MAX_CHAT_MESSAGE_LENGTH}个字符`
+    return
+  }
   input.value = ''
   const imgs = images.value.length > 0 ? [...images.value] : undefined
   images.value = []
@@ -150,7 +168,7 @@ function parseImagesFromJSON(json: string): string[] {
 
 async function handleImageInput(files: FileList | null) {
   if (!files) return
-  for (let i = 0; i < files.length; i++) {
+  for (let i = 0; i < files.length && images.value.length < MAX_CHAT_IMAGES; i++) {
     const file = files[i]
     if (!file.type.startsWith('image/')) continue
     try {
@@ -249,6 +267,21 @@ function autoResize() {
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
               <span>新对话</span>
+            </button>
+            <button
+              class="clear-chat-btn"
+              :disabled="loading || store.conversations.length === 0"
+              @click="handleClearAll"
+              title="清空历史"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18"></path>
+                <path d="M8 6V4h8v2"></path>
+                <path d="M19 6l-1 14H6L5 6"></path>
+                <path d="M10 11v5"></path>
+                <path d="M14 11v5"></path>
+              </svg>
+              <span>清空历史</span>
             </button>
           </div>
 
@@ -428,6 +461,7 @@ function autoResize() {
                 v-model="input"
                 class="chat-input"
                 placeholder="发信息..."
+                :maxlength="MAX_CHAT_MESSAGE_LENGTH"
                 :disabled="store.sending || loading || !!store.pendingToolConfirmation"
                 rows="1"
                 @keydown="handleKeydown"
@@ -665,6 +699,35 @@ function autoResize() {
 
 .new-chat-btn:active {
   transform: translateY(0);
+}
+
+.clear-chat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 14px;
+  background: var(--btn-secondary-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+
+.clear-chat-btn:hover:not(:disabled) {
+  background: #fef0f0;
+  color: #a94442;
+}
+
+.clear-chat-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .sidebar-divider {

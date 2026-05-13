@@ -1,7 +1,13 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { getToken, removeToken } from '../services/auth'
-import { listConversations, getMessages, deleteConversation } from '../services/api'
+import {
+  listConversations,
+  getMessages,
+  deleteConversation,
+  clearConversations,
+  refreshAccessToken,
+} from '../services/api'
 import type { Conversation, ChatMessage } from '../services/api'
 
 export type { Conversation, ChatMessage }
@@ -76,6 +82,15 @@ export const useChatStore = defineStore('chat', () => {
         newConversation()
       }
     }
+  }
+
+  async function clearAllConversations() {
+    await clearConversations()
+    conversations.value = []
+    messages.value = []
+    currentConversationID.value = 0
+    pendingToolConfirmation.value = null
+    error.value = ''
   }
 
   async function consumeChatStream(
@@ -183,24 +198,39 @@ export const useChatStore = defineStore('chat', () => {
     const token = getToken()
 
     try {
-      const res = await fetch(`${BASE_URL}/chat/send`, {
+      const body = JSON.stringify({
+        conversation_id: currentConversationID.value,
+        message: text,
+        ...(images && images.length > 0 ? { images } : {}),
+      })
+      let res = await fetch(`${BASE_URL}/chat/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          conversation_id: currentConversationID.value,
-          message: text,
-          ...(images && images.length > 0 ? { images } : {}),
-        }),
+        body,
         signal: abortController.signal,
       })
 
       if (res.status === 401) {
-        removeToken()
-        window.location.href = '/login'
-        return
+        const refreshed = await refreshAccessToken()
+        if (refreshed) {
+          res = await fetch(`${BASE_URL}/chat/send`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${refreshed}`,
+            },
+            body,
+            signal: abortController.signal,
+          })
+        }
+        if (res.status === 401) {
+          removeToken()
+          window.location.href = '/login'
+          return
+        }
       }
       if (!res.ok) {
         const body = await res.json().catch(() => ({} as Record<string, string>))
@@ -237,26 +267,41 @@ export const useChatStore = defineStore('chat', () => {
     const token = getToken()
 
     try {
-      const res = await fetch(`${BASE_URL}/chat/send`, {
+      const body = JSON.stringify({
+        conversation_id: currentConversationID.value,
+        tool_confirmation: {
+          confirmation_call_id: snapshot.confirmationCallId,
+          confirmed,
+        },
+      })
+      let res = await fetch(`${BASE_URL}/chat/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          conversation_id: currentConversationID.value,
-          tool_confirmation: {
-            confirmation_call_id: snapshot.confirmationCallId,
-            confirmed,
-          },
-        }),
+        body,
         signal: abortController.signal,
       })
 
       if (res.status === 401) {
-        removeToken()
-        window.location.href = '/login'
-        return
+        const refreshed = await refreshAccessToken()
+        if (refreshed) {
+          res = await fetch(`${BASE_URL}/chat/send`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${refreshed}`,
+            },
+            body,
+            signal: abortController.signal,
+          })
+        }
+        if (res.status === 401) {
+          removeToken()
+          window.location.href = '/login'
+          return
+        }
       }
       if (!res.ok) {
         const body = await res.json().catch(() => ({} as Record<string, string>))
@@ -291,6 +336,7 @@ export const useChatStore = defineStore('chat', () => {
     switchConversation,
     newConversation,
     deleteConversation: removeConversation,
+    clearAllConversations,
     send,
     resolveToolConfirmation,
     stopStreaming,

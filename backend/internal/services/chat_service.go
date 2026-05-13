@@ -5,10 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	hvagent "healthvision/backend/internal/agent"
+	"healthvision/backend/internal/config"
 	"healthvision/backend/internal/models"
 
 	adkagent "google.golang.org/adk/agent"
@@ -34,16 +37,23 @@ const (
 // It owns the conversation persistence (chat_messages / conversations) and
 // drives the agent through ADK's tool-use loop.
 type ChatService struct {
-	db      *gorm.DB
-	runner  *runner.Runner
-	session session.Service
+	db         *gorm.DB
+	runner     *runner.Runner
+	session    session.Service
+	chatConfig config.ChatConfig
 }
 
 // NewChatService creates a ChatService backed by an ADK runner. The caller
 // is expected to wire the agent's tools so that runner.Run can invoke them
 // when the model requests it.
-func NewChatService(db *gorm.DB, r *runner.Runner, s session.Service) *ChatService {
-	return &ChatService{db: db, runner: r, session: s}
+func NewChatService(db *gorm.DB, r *runner.Runner, s session.Service, cfg config.ChatConfig) *ChatService {
+	return &ChatService{db: db, runner: r, session: s, chatConfig: cfg}
+}
+
+// ChatCleanupResult reports how many rows were pruned by a cleanup pass.
+type ChatCleanupResult struct {
+	DeletedMessages      int64 `json:"deleted_messages"`
+	DeletedConversations int64 `json:"deleted_conversations"`
 }
 
 // ToolConfirmationInput is sent by the client to approve or reject a pending ADK write tool.
@@ -160,6 +170,10 @@ func (s *ChatService) Send(ctx context.Context, input SendInput, cb StreamCallba
 			Update("title", title)
 	}
 
+	if _, err := s.EnforceUserQuota(ctx, userID); err != nil {
+		log.Printf("chat: enforce user quota: %v", err)
+	}
+
 	return &SendResult{
 		ConversationID:      convID,
 		Title:               defaultTitle,
@@ -191,7 +205,7 @@ func (s *ChatService) ensureADKSession(ctx context.Context, userID, convID uint,
 		UserID:    userIDStr,
 		SessionID: sessionID,
 		State: map[string]any{
-			"user_id":           userIDStr,
+			"user_id":         userIDStr,
 			"conversation_id": strconv.FormatUint(uint64(convID), 10),
 		},
 	})
@@ -322,9 +336,9 @@ runLoop:
 		}
 	}
 
-		reply := finalReply.String()
-		pending := emittedConfirmation && strings.TrimSpace(reply) == ""
-		return reply, pending, nil
+	reply := finalReply.String()
+	pending := emittedConfirmation && strings.TrimSpace(reply) == ""
+	return reply, pending, nil
 }
 
 // friendlyToolHint returns a user-facing Chinese confirmation message for a tool,
@@ -423,14 +437,167 @@ func (s *ChatService) DeleteConversation(ctx context.Context, id uint, userID ui
 		return err
 	}
 
+	s.deleteADKSession(ctx, userID, id)
+	return nil
+}
+
+// DeleteAllConversations removes every chat conversation owned by the user.
+func (s *ChatService) DeleteAllConversations(ctx context.Context, userID uint) error {
+	var convs []models.Conversation
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Select("id, user_id").Where("user_id = ?", userID).Find(&convs).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", userID).Delete(&models.ChatMessage{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("user_id = ?", userID).Delete(&models.Conversation{}).Error
+	})
+	if err != nil {
+		return err
+	}
+	for _, conv := range convs {
+		s.deleteADKSession(ctx, conv.UserID, conv.ID)
+	}
+	return nil
+}
+
+// CleanupExpired deletes messages older than the configured retention period
+// and drops conversations that no longer contain any messages.
+func (s *ChatService) CleanupExpired(ctx context.Context, now time.Time) (ChatCleanupResult, error) {
+	var result ChatCleanupResult
+	if s.chatConfig.RetentionDays <= 0 {
+		return result, nil
+	}
+
+	cutoff := now.AddDate(0, 0, -s.chatConfig.RetentionDays)
+	var emptyConvs []models.Conversation
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		deletedMsgs := tx.Where("created_at < ?", cutoff).Delete(&models.ChatMessage{})
+		if deletedMsgs.Error != nil {
+			return deletedMsgs.Error
+		}
+		result.DeletedMessages = deletedMsgs.RowsAffected
+
+		var err error
+		emptyConvs, err = findEmptyConversations(tx, 0)
+		if err != nil {
+			return err
+		}
+		deletedConvs, err := deleteConversations(tx, emptyConvs)
+		if err != nil {
+			return err
+		}
+		result.DeletedConversations = deletedConvs
+		return nil
+	})
+	if err != nil {
+		return result, err
+	}
+	for _, conv := range emptyConvs {
+		s.deleteADKSession(ctx, conv.UserID, conv.ID)
+	}
+	return result, nil
+}
+
+// EnforceUserQuota keeps only the newest configured number of messages for a
+// user. Set CHAT_MAX_MESSAGES_PER_USER=0 to disable quota pruning.
+func (s *ChatService) EnforceUserQuota(ctx context.Context, userID uint) (ChatCleanupResult, error) {
+	var result ChatCleanupResult
+	limit := s.chatConfig.MaxMessagesPerUser
+	if limit <= 0 {
+		return result, nil
+	}
+
+	var total int64
+	if err := s.db.WithContext(ctx).Model(&models.ChatMessage{}).
+		Where("user_id = ?", userID).
+		Count(&total).Error; err != nil {
+		return result, err
+	}
+	if total <= int64(limit) {
+		return result, nil
+	}
+
+	var keepIDs []uint
+	if err := s.db.WithContext(ctx).Model(&models.ChatMessage{}).
+		Where("user_id = ?", userID).
+		Order("created_at DESC, id DESC").
+		Limit(limit).
+		Pluck("id", &keepIDs).Error; err != nil {
+		return result, err
+	}
+	if len(keepIDs) == 0 {
+		return result, nil
+	}
+
+	var emptyConvs []models.Conversation
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		deletedMsgs := tx.Where("user_id = ? AND id NOT IN ?", userID, keepIDs).Delete(&models.ChatMessage{})
+		if deletedMsgs.Error != nil {
+			return deletedMsgs.Error
+		}
+		result.DeletedMessages = deletedMsgs.RowsAffected
+
+		var err error
+		emptyConvs, err = findEmptyConversations(tx, userID)
+		if err != nil {
+			return err
+		}
+		deletedConvs, err := deleteConversations(tx, emptyConvs)
+		if err != nil {
+			return err
+		}
+		result.DeletedConversations = deletedConvs
+		return nil
+	})
+	if err != nil {
+		return result, err
+	}
+	for _, conv := range emptyConvs {
+		s.deleteADKSession(ctx, conv.UserID, conv.ID)
+	}
+	return result, nil
+}
+
+func findEmptyConversations(tx *gorm.DB, userID uint) ([]models.Conversation, error) {
+	sub := tx.Model(&models.ChatMessage{}).
+		Select("1").
+		Where("chat_messages.conversation_id = conversations.id")
+
+	query := tx.Model(&models.Conversation{}).
+		Select("id, user_id").
+		Where("NOT EXISTS (?)", sub)
+	if userID != 0 {
+		query = query.Where("user_id = ?", userID)
+	}
+
+	var convs []models.Conversation
+	if err := query.Find(&convs).Error; err != nil {
+		return nil, err
+	}
+	return convs, nil
+}
+
+func deleteConversations(tx *gorm.DB, convs []models.Conversation) (int64, error) {
+	if len(convs) == 0 {
+		return 0, nil
+	}
+	ids := make([]uint, 0, len(convs))
+	for _, conv := range convs {
+		ids = append(ids, conv.ID)
+	}
+	deleted := tx.Where("id IN ?", ids).Delete(&models.Conversation{})
+	return deleted.RowsAffected, deleted.Error
+}
+
+func (s *ChatService) deleteADKSession(ctx context.Context, userID, convID uint) {
 	userIDStr := strconv.FormatUint(uint64(userID), 10)
-	sid := adkSessionID(userID, id)
 	_ = s.session.Delete(ctx, &session.DeleteRequest{
 		AppName:   appName,
 		UserID:    userIDStr,
-		SessionID: sid,
+		SessionID: adkSessionID(userID, convID),
 	})
-	return nil
 }
 
 func (s *ChatService) getHistory(ctx context.Context, convID uint, userID uint, excludeLastUser bool) ([]models.ChatMessage, error) {

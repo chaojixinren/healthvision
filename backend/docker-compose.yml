@@ -28,10 +28,13 @@ services:
       JWT_SECRET: ${JWT_SECRET:?err}
       JWT_ISSUER: healthvision
       ACCESS_TOKEN_TTL: 24h
+      REFRESH_TOKEN_TTL: 720h
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       LLM_API_KEY: ${LLM_API_KEY:?err}
       AGENT_REQUIRE_WRITE_TOOL_CONFIRMATION: "true"
+      CHAT_RETENTION_DAYS: ${CHAT_RETENTION_DAYS:-30}
+      CHAT_MAX_MESSAGES_PER_USER: ${CHAT_MAX_MESSAGES_PER_USER:-2000}
     depends_on:
       mysql:
         condition: service_healthy

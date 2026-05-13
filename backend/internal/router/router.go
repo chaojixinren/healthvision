@@ -53,6 +53,7 @@ func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHa
 			protected.GET("/chat/conversations", chatHandler.ListConversations)
 			protected.POST("/chat/messages", chatHandler.GetMessages)
 			protected.POST("/chat/delete", chatHandler.DeleteConversation)
+			protected.POST("/chat/clear", chatHandler.ClearConversations)
 
 			protected.GET("/users/search", bindingHandler.SearchUsers)
 			protected.PUT("/users/me/identity", bindingHandler.ChangeIdentity)
