@@ -4,12 +4,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
+	"unicode/utf8"
 
 	"healthvision/backend/internal/models"
 	"healthvision/backend/internal/repository"
 )
 
-var ErrMedicineNotFound = errors.New("药品不存在")
+var (
+	ErrMedicineNotFound        = errors.New("药品不存在")
+	ErrInvalidMedicineName     = errors.New("药品名称不能为空")
+	ErrInvalidMedicineImageURL = errors.New("图片地址必须是有效的 http 或 https 地址")
+	ErrInvalidMedicineText     = errors.New("药品说明或备注过长")
+)
+
+const (
+	maxMedicineNameLength        = 100
+	maxMedicineImageURLLength    = 500
+	maxMedicineDescriptionLength = 2000
+	maxMedicineNotesLength       = 1000
+)
 
 type MedicineStore interface {
 	Create(ctx context.Context, medicine *models.Medicine) error
@@ -33,6 +48,10 @@ func NewMedicineService(store MedicineStore, reminder ReminderDeleter) *Medicine
 }
 
 func (s *MedicineService) Create(ctx context.Context, userID uint, name, imageURL, description, notes string) (*models.Medicine, error) {
+	name, imageURL, description, notes, err := validateMedicineInput(name, imageURL, description, notes)
+	if err != nil {
+		return nil, err
+	}
 	medicine := &models.Medicine{
 		UserID:      userID,
 		Name:        name,
@@ -69,6 +88,10 @@ func (s *MedicineService) List(ctx context.Context, userID uint, page, perPage i
 }
 
 func (s *MedicineService) Update(ctx context.Context, id uint, userID uint, name, imageURL, description, notes string) (*models.Medicine, error) {
+	name, imageURL, description, notes, err := validateMedicineInput(name, imageURL, description, notes)
+	if err != nil {
+		return nil, err
+	}
 	medicine, err := s.store.FindByID(ctx, id, userID)
 	if errors.Is(err, repository.ErrMedicineNotFound) {
 		return nil, ErrMedicineNotFound
@@ -96,4 +119,31 @@ func (s *MedicineService) Delete(ctx context.Context, id uint, userID uint) erro
 		return fmt.Errorf("删除药品失败: %w", err)
 	}
 	return nil
+}
+
+func validateMedicineInput(name, imageURL, description, notes string) (string, string, string, string, error) {
+	name = strings.TrimSpace(name)
+	imageURL = strings.TrimSpace(imageURL)
+	description = strings.TrimSpace(description)
+	notes = strings.TrimSpace(notes)
+
+	if name == "" || utf8.RuneCountInString(name) > maxMedicineNameLength {
+		return "", "", "", "", ErrInvalidMedicineName
+	}
+	if utf8.RuneCountInString(description) > maxMedicineDescriptionLength ||
+		utf8.RuneCountInString(notes) > maxMedicineNotesLength {
+		return "", "", "", "", ErrInvalidMedicineText
+	}
+	if imageURL == "" {
+		return name, imageURL, description, notes, nil
+	}
+	if utf8.RuneCountInString(imageURL) > maxMedicineImageURLLength {
+		return "", "", "", "", ErrInvalidMedicineImageURL
+	}
+	parsed, err := url.ParseRequestURI(imageURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" ||
+		(parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return "", "", "", "", ErrInvalidMedicineImageURL
+	}
+	return name, imageURL, description, notes, nil
 }

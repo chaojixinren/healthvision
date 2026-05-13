@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"healthvision/backend/internal/models"
 	"healthvision/backend/internal/repository"
@@ -44,6 +45,7 @@ func NewBindingService(bindings BindingStore, users BindingUserStore) *BindingSe
 }
 
 func (s *BindingService) Create(ctx context.Context, fromUserID uint, toEmail string) (*models.Binding, error) {
+	toEmail = strings.ToLower(strings.TrimSpace(toEmail))
 	targetUser, err := s.users.FindByEmail(ctx, toEmail)
 	if errors.Is(err, repository.ErrUserNotFound) {
 		return nil, errors.New("目标用户不存在")
@@ -163,6 +165,7 @@ func (s *BindingService) ChangeIdentity(ctx context.Context, user *models.User) 
 }
 
 func (s *BindingService) SearchUsers(ctx context.Context, query string, excludeID uint) ([]models.User, error) {
+	query = strings.ToLower(strings.TrimSpace(query))
 	user, err := s.users.FindByEmail(ctx, query)
 	if errors.Is(err, repository.ErrUserNotFound) {
 		return []models.User{}, nil

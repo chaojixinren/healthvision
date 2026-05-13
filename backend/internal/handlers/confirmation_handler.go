@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"time"
 
 	"healthvision/backend/internal/httputil"
@@ -62,7 +61,10 @@ func (h *ConfirmationHandler) List(c *gin.Context) {
 		return
 	}
 
-	date := c.DefaultQuery("date", time.Now().Format("2006-01-02"))
+	date, ok := parseDateQuery(c, "date", time.Now())
+	if !ok {
+		return
+	}
 
 	var confirmations []models.Confirmation
 	var err error
@@ -127,13 +129,12 @@ func (h *ConfirmationHandler) Confirm(c *gin.Context) {
 		return
 	}
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
-	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的确认 ID")
+	id, ok := parsePositiveUintParam(c, "id", "确认 ID")
+	if !ok {
 		return
 	}
 
-	cf, err := h.svc.Confirm(c.Request.Context(), uint(id), user.ID, user.IsOld)
+	cf, err := h.svc.Confirm(c.Request.Context(), id, user.ID, user.IsOld)
 	if err != nil {
 		switch err {
 		case services.ErrAlreadyConfirmed:

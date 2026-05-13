@@ -3,7 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
-	"strconv"
+	"strings"
 
 	"healthvision/backend/internal/httputil"
 	"healthvision/backend/internal/models"
@@ -21,11 +21,11 @@ func NewBindingHandler(bindings *services.BindingService) *BindingHandler {
 }
 
 type createBindingRequest struct {
-	ToEmail string `json:"to_email" binding:"required,email"`
+	ToEmail string `json:"to_email" binding:"required"`
 }
 
 type respondBindingRequest struct {
-	Accept bool `json:"accept"`
+	Accept *bool `json:"accept" binding:"required"`
 }
 
 func (h *BindingHandler) Create(c *gin.Context) {
@@ -36,8 +36,10 @@ func (h *BindingHandler) Create(c *gin.Context) {
 	}
 
 	var req createBindingRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_request", err.Error())
+	if !bindJSON(c, &req) {
+		return
+	}
+	if !requireEmail(c, &req.ToEmail, "对方邮箱") {
 		return
 	}
 
@@ -89,19 +91,17 @@ func (h *BindingHandler) Respond(c *gin.Context) {
 		return
 	}
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的绑定 ID")
+	id, ok := parsePositiveUintParam(c, "id", "绑定 ID")
+	if !ok {
 		return
 	}
 
 	var req respondBindingRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_request", err.Error())
+	if !bindJSON(c, &req) {
 		return
 	}
 
-	binding, err := h.bindings.Respond(c.Request.Context(), user.ID, uint(id), req.Accept)
+	binding, err := h.bindings.Respond(c.Request.Context(), user.ID, id, *req.Accept)
 	if errors.Is(err, services.ErrBindingNotFound) {
 		httputil.ErrorJSON(c, http.StatusNotFound, "binding_not_found", "绑定关系不存在")
 		return
@@ -129,13 +129,12 @@ func (h *BindingHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_id", "无效的绑定 ID")
+	id, ok := parsePositiveUintParam(c, "id", "绑定 ID")
+	if !ok {
 		return
 	}
 
-	err = h.bindings.Delete(c.Request.Context(), user.ID, uint(id))
+	err := h.bindings.Delete(c.Request.Context(), user.ID, id)
 	if errors.Is(err, services.ErrBindingNotFound) {
 		httputil.ErrorJSON(c, http.StatusNotFound, "binding_not_found", "绑定关系不存在")
 		return
@@ -169,7 +168,7 @@ func (h *BindingHandler) ChangeIdentity(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"user":   toUserResponse(user),
+		"user":    toUserResponse(user),
 		"message": "身份已切换",
 	})
 }
@@ -181,9 +180,12 @@ func (h *BindingHandler) SearchUsers(c *gin.Context) {
 		return
 	}
 
-	query := c.Query("q")
+	query := strings.TrimSpace(c.Query("q"))
 	if query == "" {
 		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_request", "请输入搜索关键词")
+		return
+	}
+	if !requireEmail(c, &query, "搜索邮箱") {
 		return
 	}
 

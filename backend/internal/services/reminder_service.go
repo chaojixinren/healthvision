@@ -99,6 +99,9 @@ func defaultRepeatConfig(repeatType string, intervalDays int, weekdays string) (
 }
 
 func (s *ReminderService) Create(ctx context.Context, creatorID uint, targetUserID uint, medicineID uint, timeStr string, repeatType string, intervalDays int, weekdays string) (*models.Reminder, error) {
+	timeStr = strings.TrimSpace(timeStr)
+	repeatType = strings.TrimSpace(repeatType)
+	weekdays = strings.TrimSpace(weekdays)
 	if err := validateTime(timeStr); err != nil {
 		return nil, err
 	}
@@ -175,6 +178,9 @@ func (s *ReminderService) ListByCreator(ctx context.Context, createdBy uint, med
 }
 
 func (s *ReminderService) Update(ctx context.Context, id uint, userID uint, timeStr string, enabled bool, repeatType string, intervalDays int, weekdays string) (*models.Reminder, error) {
+	timeStr = strings.TrimSpace(timeStr)
+	repeatType = strings.TrimSpace(repeatType)
+	weekdays = strings.TrimSpace(weekdays)
 	if err := validateTime(timeStr); err != nil {
 		return nil, err
 	}
