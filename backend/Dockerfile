@@ -1,5 +1,10 @@
 FROM golang:1.25-alpine AS builder
 
+ARG GOPROXY=https://goproxy.cn,direct
+ARG GOSUMDB=sum.golang.google.cn
+ENV GOPROXY=${GOPROXY}
+ENV GOSUMDB=${GOSUMDB}
+
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -19,5 +24,8 @@ ENV PORT=8080
 COPY --from=builder /server /server
 
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
+  CMD wget -qO- "http://127.0.0.1:${PORT}/healthz" >/dev/null || exit 1
 
 ENTRYPOINT ["/server"]

@@ -1,5 +1,7 @@
 backend/.env
+backend/.env.production
 backend/data/
+backend/dist/
 backend/tmp/
 backend/*.db
 backend/*.db-shm

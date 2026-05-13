@@ -1,0 +1,61 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-healthvision}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - healthvision
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+        GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
+    image: ${BACKEND_IMAGE:-healthvision-backend:latest}
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      APP_ENV: production
+      PORT: "8080"
+      DB_DRIVER: mysql
+      DB_DSN: root:${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-healthvision}?charset=utf8mb4&parseTime=True&loc=Local
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_ISSUER: ${JWT_ISSUER:-healthvision}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-24h}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-720h}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:?set LLM_API_KEY}
+      AGENT_REQUIRE_WRITE_TOOL_CONFIRMATION: ${AGENT_REQUIRE_WRITE_TOOL_CONFIRMATION:-true}
+      CHAT_RETENTION_DAYS: ${CHAT_RETENTION_DAYS:-30}
+      CHAT_MAX_MESSAGES_PER_USER: ${CHAT_MAX_MESSAGES_PER_USER:-2000}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      start_period: 20s
+      retries: 3
+    networks:
+      - healthvision
+
+networks:
+  healthvision:
+    driver: bridge
+
+volumes:
+  mysql_data:

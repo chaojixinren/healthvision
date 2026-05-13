@@ -1,5 +1,7 @@
 .env
+.env.production
 .env.example
+.env.production.example
 server
 data/
 tmp/
