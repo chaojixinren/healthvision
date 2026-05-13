@@ -20,6 +20,16 @@ const reminders = computed<Reminder[]>(() => care.reminders)
 const bindings = computed<Binding[]>(() => care.bindings)
 const confirmations = computed<Confirmation[]>(() => care.confirmations)
 const loading = computed(() => care.loading)
+const offlineMessage = computed(() => care.offlineMessage)
+const syncLabel = computed(() => {
+  if (!care.lastSyncedAt) return ''
+  return new Date(care.lastSyncedAt).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+})
 const error = computed({
   get: () => care.error,
   set: (value: string) => { care.error = value },
@@ -262,6 +272,11 @@ onMounted(fetchData)
       <button v-if="canCreate" class="btn-primary" @click="openCreate">+ 添加提醒</button>
     </div>
 
+    <div v-if="offlineMessage" class="offline-note">
+      <span>{{ offlineMessage }}</span>
+      <span v-if="syncLabel">上次同步：{{ syncLabel }}</span>
+    </div>
+
     <div v-if="error" class="error-banner">{{ error }}</div>
     <div v-if="loading" class="loading">加载中...</div>
 
@@ -275,6 +290,7 @@ onMounted(fetchData)
         <div class="reminder-main">
           <div class="reminder-left">
             <div class="medicine-label">{{ r.medicine_name }}</div>
+            <span v-if="care.isReminderPending(r.id)" class="pending-badge">待同步</span>
             <div v-if="medicineNotes(r.medicine_id)" class="medicine-notes">{{ medicineNotes(r.medicine_id) }}</div>
             <div v-if="canCreate && targetUserName(r.user_id)" class="target-label">
               为：{{ targetUserName(r.user_id) }}
@@ -309,6 +325,12 @@ onMounted(fetchData)
           <template v-if="reminderStates.get(r.id)!.status === 'confirmed'">
             <span class="confirm-icon">&#x2705;</span>
             <span class="confirm-text">已服 {{ formatConfirmTime(reminderStates.get(r.id)!.confirmation.confirmed_at ?? '') }}</span>
+            <span
+              v-if="care.isConfirmationPending(reminderStates.get(r.id)!.confirmation.id)"
+              class="pending-badge"
+            >
+              待同步
+            </span>
           </template>
           <template v-else-if="!elderly && elderReminderIds.has(r.id)">
             <template v-if="reminderStates.get(r.id)!.status === 'within_window'">
@@ -451,6 +473,18 @@ onMounted(fetchData)
   font-size: 0.875rem;
 }
 
+.offline-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  background: #fff4d6;
+  color: #7a4f00;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-card);
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
 .loading,
 .empty {
   text-align: center;
@@ -510,6 +544,16 @@ onMounted(fetchData)
   background: #e3f2fd;
   padding: 0.125rem 0.5rem;
   border-radius: 999px;
+}
+
+.pending-badge {
+  flex: none;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #e8f3ff;
+  color: #24527a;
+  font-size: 0.6875rem;
+  font-weight: 700;
 }
 
 .target-label.created-by {

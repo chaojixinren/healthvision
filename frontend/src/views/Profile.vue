@@ -91,6 +91,7 @@ async function handleChangeIdentity() {
   identityLoading.value = true
   try {
     const res = await changeIdentity()
+    await care.clearOfflineData(user.value.id)
     auth.setCurrentUser(res.user)
     care.reset()
     router.push('/reminders')
@@ -102,7 +103,9 @@ async function handleChangeIdentity() {
 }
 
 async function logout() {
-  await logoutSession()
+  const userId = auth.user?.id ?? null
+  await logoutSession().catch(() => {})
+  await care.clearOfflineData(userId)
   auth.clearSession()
   care.reset()
   router.push('/')

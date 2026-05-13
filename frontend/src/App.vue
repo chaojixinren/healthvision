@@ -4,11 +4,13 @@ import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { requestPermissions, ensureExactAlarms, addListeners, removeAllListeners } from './services/notifications'
 import { useAuthStore } from './stores/auth'
 import { useCareStore } from './stores/care'
+import { useNetworkStore } from './stores/network'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const care = useCareStore()
+const network = useNetworkStore()
 
 const isLanding = computed(() => route.path === '/')
 const authenticated = computed(() => auth.isAuthenticated)
@@ -25,14 +27,22 @@ async function prepareNotifications() {
 }
 
 onMounted(async () => {
+  await network.init()
   await prepareNotifications()
   addListeners(() => {
     router.push('/reminders')
   })
 })
 
+watch(() => network.connected, (connected, wasConnected) => {
+  if (connected && wasConnected === false && auth.isAuthenticated) {
+    care.syncQueuedChanges().catch(() => {})
+  }
+})
+
 watch(() => auth.isAuthenticated, (loggedIn) => {
   if (loggedIn) {
+    care.refreshPendingSyncCount()
     prepareNotifications()
   } else {
     care.reset()
@@ -41,6 +51,7 @@ watch(() => auth.isAuthenticated, (loggedIn) => {
 
 onUnmounted(() => {
   removeAllListeners()
+  network.dispose().catch(() => {})
 })
 
 const tabs = computed(() => {
@@ -61,6 +72,29 @@ const tabs = computed(() => {
 </script>
 
 <template>
+  <div v-if="authenticated && !network.connected" class="offline-banner">
+    离线模式
+  </div>
+  <div
+    v-else-if="authenticated && (care.pendingSyncCount > 0 || care.syncError)"
+    class="sync-banner"
+    :class="{ failed: !!care.syncError }"
+  >
+    <span v-if="care.syncing">正在同步离线更改...</span>
+    <span v-else-if="care.syncError">
+      同步失败，稍后自动重试<span v-if="care.pendingSyncCount > 0">（{{ care.pendingSyncCount }} 项待同步）</span>
+    </span>
+    <span v-else>{{ care.pendingSyncCount }} 项离线更改待同步</span>
+    <button
+      v-if="!care.syncing && network.connected"
+      class="sync-retry"
+      type="button"
+      @click="care.syncQueuedChanges()"
+    >
+      立即重试
+    </button>
+  </div>
+
   <header v-if="!isLanding" class="navbar">
     <div class="container navbar-inner" :class="{ centered: authenticated }">
       <router-link v-if="!authenticated" to="/" class="logo">HealthVision</router-link>
@@ -122,6 +156,52 @@ const tabs = computed(() => {
 </template>
 
 <style scoped>
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  padding: 0.5rem 1rem;
+  background: #fff4d6;
+  color: #7a4f00;
+  border-bottom: 1px solid #f1d28a;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.sync-banner {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  padding: 0.5rem 1rem;
+  background: #e8f3ff;
+  color: #24527a;
+  border-bottom: 1px solid #b8d9f8;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.sync-banner.failed {
+  background: #fff4d6;
+  color: #7a4f00;
+  border-bottom-color: #f1d28a;
+}
+
+.sync-retry {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
 .navbar {
   background: var(--card);
   border-bottom: 1px solid var(--border);

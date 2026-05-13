@@ -6,6 +6,16 @@ import { useCareStore } from '../stores/care'
 const care = useCareStore()
 const medicines = computed(() => care.medicines)
 const loading = computed(() => care.loading)
+const offlineMessage = computed(() => care.offlineMessage)
+const syncLabel = computed(() => {
+  if (!care.lastSyncedAt) return ''
+  return new Date(care.lastSyncedAt).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+})
 const error = computed({
   get: () => care.error,
   set: (value: string) => { care.error = value },
@@ -82,6 +92,11 @@ onMounted(fetchMedicines)
       <button class="btn-primary" @click="openCreate">+ 添加药品</button>
     </div>
 
+    <div v-if="offlineMessage" class="offline-note">
+      <span>{{ offlineMessage }}</span>
+      <span v-if="syncLabel">上次同步：{{ syncLabel }}</span>
+    </div>
+
     <div v-if="error" class="error-banner">{{ error }}</div>
     <div v-if="loading" class="loading">加载中...</div>
 
@@ -95,7 +110,10 @@ onMounted(fetchMedicines)
           <img :src="m.image_url" :alt="m.name" />
         </div>
         <div class="medicine-body">
-          <h3>{{ m.name }}</h3>
+          <div class="medicine-title-row">
+            <h3>{{ m.name }}</h3>
+            <span v-if="care.isMedicinePending(m.id)" class="pending-badge">待同步</span>
+          </div>
           <p v-if="m.description" class="desc">{{ m.description }}</p>
           <p v-if="m.notes" class="notes">
             <span class="label">备注：</span>{{ m.notes }}
@@ -164,6 +182,18 @@ onMounted(fetchMedicines)
   font-size: 0.875rem;
 }
 
+.offline-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  background: #fff4d6;
+  color: #7a4f00;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-card);
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
 .loading,
 .empty {
   text-align: center;
@@ -205,7 +235,24 @@ onMounted(fetchMedicines)
 
 .medicine-body h3 {
   font-size: 1.125rem;
+}
+
+.medicine-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
+}
+
+.pending-badge {
+  flex: none;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #e8f3ff;
+  color: #24527a;
+  font-size: 0.6875rem;
+  font-weight: 700;
 }
 
 .desc {
