@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { isAuthenticated } from '../services/auth'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+const auth = useAuthStore()
 
 function cta() {
-  router.push(isAuthenticated() ? '/medicines' : '/register')
+  router.push(auth.isAuthenticated ? (auth.isOld ? '/reminders' : '/medicines') : '/register')
 }
 </script>
 

@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { isAuthenticated, isOld } from '../services/auth'
+import { useAuthStore } from '../stores/auth'
 import Home from '../views/Home.vue'
 import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
@@ -22,15 +22,16 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const authenticated = isAuthenticated()
+  const auth = useAuthStore()
+  const authenticated = auth.isAuthenticated
 
   if (to.meta.auth && !authenticated) return '/login'
 
   if (to.meta.guest && authenticated) {
-    return isOld() ? '/reminders' : '/medicines'
+    return auth.isOld ? '/reminders' : '/medicines'
   }
 
-  if (authenticated && isOld() && (to.path === '/medicines' || to.path === '/chat')) {
+  if (authenticated && auth.isOld && (to.path === '/medicines' || to.path === '/chat')) {
     return '/reminders'
   }
 })

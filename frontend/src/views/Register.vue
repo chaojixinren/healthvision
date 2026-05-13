@@ -2,9 +2,10 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { register } from '../services/api'
-import { setToken, setUser } from '../services/auth'
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
+const auth = useAuthStore()
 const username = ref('')
 const email = ref('')
 const password = ref('')
@@ -17,8 +18,7 @@ async function submit() {
   loading.value = true
   try {
     const res = await register({ name: username.value, email: email.value, password: password.value, is_old: isOld.value })
-    setToken(res.access_token)
-    setUser(res.user)
+    auth.setSession(res)
     router.push(res.user.is_old ? '/reminders' : '/medicines')
   } catch (e: any) {
     error.value = e.message || '注册失败'
@@ -37,15 +37,15 @@ async function submit() {
       <form @submit.prevent="submit" class="auth-form">
         <div class="field">
           <label for="username">用户名</label>
-          <input id="username" v-model="username" type="text" placeholder="请设置用户名" required />
+          <input id="username" v-model="username" type="text" placeholder="请设置用户名" required maxlength="100" />
         </div>
         <div class="field">
           <label for="email">邮箱</label>
-          <input id="email" v-model="email" type="email" placeholder="请输入邮箱" required />
+          <input id="email" v-model="email" type="email" placeholder="请输入邮箱" required maxlength="254" />
         </div>
         <div class="field">
           <label for="password">密码</label>
-          <input id="password" v-model="password" type="password" placeholder="请设置密码（至少 6 位）" required minlength="6" />
+          <input id="password" v-model="password" type="password" placeholder="请设置密码（至少 8 位）" required minlength="8" maxlength="128" />
         </div>
 
         <div class="field">

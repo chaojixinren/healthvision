@@ -4,19 +4,19 @@ import { useRouter } from 'vue-router'
 import {
   getMe,
   searchUsers,
-  createBinding,
-  listBindings,
-  respondBinding,
-  deleteBinding,
   changeIdentity,
+  logoutSession,
   type User,
   type Binding,
 } from '../services/api'
-import { removeToken, setUser } from '../services/auth'
+import { useAuthStore } from '../stores/auth'
+import { useCareStore } from '../stores/care'
 
 const router = useRouter()
-const user = ref<User | null>(null)
-const bindings = ref<Binding[]>([])
+const auth = useAuthStore()
+const care = useCareStore()
+const user = computed(() => auth.user)
+const bindings = computed(() => care.bindings)
 const loading = ref(true)
 
 const searchQuery = ref('')
@@ -28,9 +28,8 @@ const identityLoading = ref(false)
 
 onMounted(async () => {
   try {
-    const [u, b] = await Promise.all([getMe(), listBindings()])
-    user.value = u
-    bindings.value = b.bindings || []
+    const [u] = await Promise.all([getMe(), care.loadBindings()])
+    auth.setCurrentUser(u)
   } catch {
     // auth guard handles redirect
   } finally {
@@ -59,11 +58,9 @@ async function handleCreateBinding() {
   if (!searchResult.value) return
   bindingLoading.value = true
   try {
-    await createBinding(searchResult.value.email)
+    await care.createBinding(searchResult.value.email)
     searchResult.value = null
     searchQuery.value = ''
-    const b = await listBindings()
-    bindings.value = b.bindings || []
   } catch (e: any) {
     searchError.value = e.message || '发起绑定失败'
   } finally {
@@ -73,9 +70,7 @@ async function handleCreateBinding() {
 
 async function handleRespond(id: number, accept: boolean) {
   try {
-    await respondBinding(id, accept)
-    const b = await listBindings()
-    bindings.value = b.bindings || []
+    await care.respondBinding(id, accept)
   } catch (e: any) {
     alert(e.message || '操作失败')
   }
@@ -83,9 +78,7 @@ async function handleRespond(id: number, accept: boolean) {
 
 async function handleDeleteBinding(id: number) {
   try {
-    await deleteBinding(id)
-    const b = await listBindings()
-    bindings.value = b.bindings || []
+    await care.deleteBinding(id)
   } catch (e: any) {
     alert(e.message || '删除失败')
   }
@@ -98,9 +91,8 @@ async function handleChangeIdentity() {
   identityLoading.value = true
   try {
     const res = await changeIdentity()
-    user.value = res.user
-    setUser(res.user)
-    bindings.value = []
+    auth.setCurrentUser(res.user)
+    care.reset()
     router.push('/reminders')
   } catch (e: any) {
     alert(e.message || '切换失败')
@@ -109,8 +101,10 @@ async function handleChangeIdentity() {
   }
 }
 
-function logout() {
-  removeToken()
+async function logout() {
+  await logoutSession()
+  auth.clearSession()
+  care.reset()
   router.push('/')
 }
 
@@ -214,9 +208,10 @@ const activeBindings = computed(() => bindings.value.filter(b => b.status === 'a
         <div class="search-row">
           <input
             v-model="searchQuery"
-            type="text"
+            type="email"
             class="search-input"
             placeholder="输入对方邮箱搜索..."
+            maxlength="254"
             @keyup.enter="handleSearch"
           />
           <button class="btn-primary" :disabled="searching" @click="handleSearch">

@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import {
-  listMedicines,
-  createMedicine,
-  updateMedicine,
-  deleteMedicine,
-  type Medicine,
-} from '../services/api'
+import { computed, ref, onMounted } from 'vue'
+import type { Medicine } from '../services/api'
+import { useCareStore } from '../stores/care'
 
-const medicines = ref<Medicine[]>([])
-const loading = ref(true)
-const error = ref('')
+const care = useCareStore()
+const medicines = computed(() => care.medicines)
+const loading = computed(() => care.loading)
+const error = computed({
+  get: () => care.error,
+  set: (value: string) => { care.error = value },
+})
 const showForm = ref(false)
 const editingId = ref<number | null>(null)
 
@@ -22,15 +21,10 @@ const form = ref({
 })
 
 async function fetchMedicines() {
-  loading.value = true
-  error.value = ''
   try {
-    const res = await listMedicines()
-    medicines.value = res.data
+    await care.loadMedicines()
   } catch (e: any) {
     error.value = e.message || '加载失败'
-  } finally {
-    loading.value = false
   }
 }
 
@@ -59,12 +53,11 @@ async function submitForm() {
   error.value = ''
   try {
     if (editingId.value !== null) {
-      await updateMedicine(editingId.value, form.value)
+      await care.updateMedicine(editingId.value, form.value)
     } else {
-      await createMedicine(form.value)
+      await care.createMedicine(form.value)
     }
     showForm.value = false
-    await fetchMedicines()
   } catch (e: any) {
     error.value = e.message || '保存失败'
   }
@@ -73,8 +66,7 @@ async function submitForm() {
 async function remove(id: number) {
   if (!confirm('确定要删除这个药品吗？')) return
   try {
-    await deleteMedicine(id)
-    await fetchMedicines()
+    await care.deleteMedicine(id)
   } catch (e: any) {
     error.value = e.message || '删除失败'
   }
@@ -127,15 +119,15 @@ onMounted(fetchMedicines)
           </div>
           <div class="field">
             <label>图片地址</label>
-            <input v-model="form.image_url" maxlength="500" placeholder="https://..." />
+            <input v-model="form.image_url" type="url" maxlength="500" placeholder="https://..." />
           </div>
           <div class="field">
             <label>药品说明</label>
-            <textarea v-model="form.description" rows="3" placeholder="药品用途、成分等说明" />
+            <textarea v-model="form.description" rows="3" maxlength="2000" placeholder="药品用途、成分等说明" />
           </div>
           <div class="field">
             <label>服用备注</label>
-            <textarea v-model="form.notes" rows="2" placeholder="饭后服用、每日两次等" />
+            <textarea v-model="form.notes" rows="2" maxlength="1000" placeholder="饭后服用、每日两次等" />
           </div>
           <div class="form-actions">
             <button type="button" class="btn-outline" @click="closeForm">取消</button>

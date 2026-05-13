@@ -1,35 +1,32 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { isOld, getUser } from '../services/auth'
 import {
-  listMedicines,
-  listReminders,
-  listBindings,
-  listConfirmations,
-  confirmDose,
-  createReminder,
-  updateReminder,
-  deleteReminder,
   type Medicine,
   type Reminder,
   type Binding,
   type Confirmation,
 } from '../services/api'
-import { scheduleAll } from '../services/notifications'
+import { useAuthStore } from '../stores/auth'
+import { useCareStore } from '../stores/care'
 
 const CONFIRMATION_WINDOW_MINUTES = 30
 
 const WEEKDAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
-const medicines = ref<Medicine[]>([])
-const reminders = ref<Reminder[]>([])
-const bindings = ref<Binding[]>([])
-const confirmations = ref<Confirmation[]>([])
-const loading = ref(true)
-const error = ref('')
+const auth = useAuthStore()
+const care = useCareStore()
+const medicines = computed<Medicine[]>(() => care.medicines)
+const reminders = computed<Reminder[]>(() => care.reminders)
+const bindings = computed<Binding[]>(() => care.bindings)
+const confirmations = computed<Confirmation[]>(() => care.confirmations)
+const loading = computed(() => care.loading)
+const error = computed({
+  get: () => care.error,
+  set: (value: string) => { care.error = value },
+})
 const showForm = ref(false)
 const editingId = ref<number | null>(null)
-const elderly = ref(isOld())
+const elderly = computed(() => auth.isOld)
 const confirmingId = ref(0)
 
 const form = ref({
@@ -44,7 +41,7 @@ const form = ref({
 const canCreate = computed(() => !elderly.value)
 
 const targetUsers = computed(() => {
-  const currentUser = getUser()
+  const currentUser = auth.user
   if (!currentUser) return []
   if (elderly.value) return []
   return bindings.value
@@ -65,7 +62,7 @@ function targetUserName(id: number): string {
 }
 
 function creatorName(createdBy: number): string {
-  const currentUser = getUser()
+  const currentUser = auth.user
   if (createdBy === currentUser?.id) return currentUser.name
   const b = bindings.value.find((b) => b.child_id === createdBy)
   return b?.child?.name || '家人'
@@ -146,9 +143,7 @@ async function handleConfirm(c: Confirmation) {
   error.value = ''
   confirmingId.value = c.id
   try {
-    await confirmDose(c.id)
-    c.confirmed_at = new Date().toISOString()
-    c.confirmed_by = getUser()?.id ?? 0
+    await care.confirm(c.id)
   } catch (e: any) {
     error.value = e.message || '确认失败'
   } finally {
@@ -158,7 +153,7 @@ async function handleConfirm(c: Confirmation) {
 
 const elderReminderIds = computed(() => {
   if (!canCreate.value) return new Set<number>()
-  const currentUser = getUser()
+  const currentUser = auth.user
   if (!currentUser) return new Set<number>()
   return new Set(
     reminders.value
@@ -170,25 +165,11 @@ const elderReminderIds = computed(() => {
 // --- Data fetching ---
 
 async function fetchData() {
-  loading.value = true
-  error.value = ''
   try {
-    const [mRes, rRes, bRes, cRes] = await Promise.all([
-      listMedicines(),
-      listReminders(),
-      listBindings(),
-      listConfirmations(),
-    ])
-    medicines.value = mRes.data
-    reminders.value = rRes.data
-    bindings.value = bRes.bindings || []
-    confirmations.value = cRes.data || []
+    await care.loadAll()
   } catch (e: any) {
     error.value = e.message || '加载失败'
-  } finally {
-    loading.value = false
   }
-  scheduleAll(reminders.value)
 }
 
 function openCreate() {
@@ -231,13 +212,13 @@ async function submitForm() {
       weekdays: form.value.repeat_type === 'weekly' ? formatWeekdays(form.value.weekdays) : undefined,
     }
     if (editingId.value !== null) {
-      await updateReminder(editingId.value, {
+      await care.updateReminder(editingId.value, {
         time: form.value.time,
         enabled: true,
         ...repeatData,
       })
     } else {
-      await createReminder({
+      await care.createReminder({
         medicine_id: form.value.medicine_id,
         time: form.value.time,
         target_user_id: form.value.target_user_id || undefined,
@@ -253,11 +234,10 @@ async function submitForm() {
 
 async function toggle(reminder: Reminder) {
   try {
-    await updateReminder(reminder.id, {
+    await care.updateReminder(reminder.id, {
       time: reminder.time,
       enabled: !reminder.enabled,
     })
-    reminder.enabled = !reminder.enabled
   } catch (e: any) {
     error.value = e.message || '操作失败'
   }
@@ -266,8 +246,7 @@ async function toggle(reminder: Reminder) {
 async function remove(id: number) {
   if (!confirm('确定要删除这个提醒吗？')) return
   try {
-    await deleteReminder(id)
-    reminders.value = reminders.value.filter((r) => r.id !== id)
+    await care.deleteReminder(id)
   } catch (e: any) {
     error.value = e.message || '删除失败'
   }

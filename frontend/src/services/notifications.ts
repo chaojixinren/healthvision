@@ -26,7 +26,6 @@ export async function ensureExactAlarms(): Promise<void> {
 function matchesRepeat(r: Reminder, date: Date): boolean {
   switch (r.repeat_type) {
     case 'daily':
-    case '':
       return true
     case 'interval': {
       if (!r.interval_days || r.interval_days <= 0) return true

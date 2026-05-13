@@ -1,35 +1,42 @@
 <script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
-import { isAuthenticated, isOld } from './services/auth'
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { listReminders } from './services/api'
-import { requestPermissions, ensureExactAlarms, scheduleAll, addListeners, removeAllListeners } from './services/notifications'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { requestPermissions, ensureExactAlarms, addListeners, removeAllListeners } from './services/notifications'
+import { useAuthStore } from './stores/auth'
+import { useCareStore } from './stores/care'
 
 const router = useRouter()
 const route = useRoute()
-const authenticated = ref(isAuthenticated())
-const elderly = ref(isOld())
+const auth = useAuthStore()
+const care = useCareStore()
 
 const isLanding = computed(() => route.path === '/')
+const authenticated = computed(() => auth.isAuthenticated)
+const elderly = computed(() => auth.isOld)
 
-router.afterEach(() => {
-  authenticated.value = isAuthenticated()
-  elderly.value = isOld()
-})
-
-onMounted(async () => {
-  if (!isAuthenticated()) return
+async function prepareNotifications() {
+  if (!auth.isAuthenticated) return
 
   try {
     await requestPermissions()
-	    await ensureExactAlarms()
-    const res = await listReminders()
-    await scheduleAll(res.data)
+    await ensureExactAlarms()
+    await care.loadReminders()
   } catch { /* notification scheduling is best-effort */ }
+}
 
+onMounted(async () => {
+  await prepareNotifications()
   addListeners(() => {
     router.push('/reminders')
   })
+})
+
+watch(() => auth.isAuthenticated, (loggedIn) => {
+  if (loggedIn) {
+    prepareNotifications()
+  } else {
+    care.reset()
+  }
 })
 
 onUnmounted(() => {
