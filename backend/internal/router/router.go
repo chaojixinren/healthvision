@@ -14,11 +14,11 @@ func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHa
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(cors.New(cors.Config{
-		AllowAllOrigins:  true,
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		MaxAge:           12 * time.Hour,
+		AllowAllOrigins: true,
+		AllowMethods:    []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:    []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:   []string{"Content-Length"},
+		MaxAge:          12 * time.Hour,
 	}))
 
 	r.GET("/healthz", func(c *gin.Context) {
@@ -29,6 +29,8 @@ func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHa
 	{
 		api.POST("/users", authHandler.Register)
 		api.POST("/sessions", authHandler.Login)
+		api.POST("/sessions/refresh", authHandler.Refresh)
+		api.DELETE("/sessions", authHandler.Logout)
 
 		protected := api.Group("")
 		protected.Use(authMiddleware)

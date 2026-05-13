@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -17,6 +18,7 @@ type Config struct {
 	Auth     AuthConfig
 	LLM      LLMConfig
 	Agent    AgentConfig
+	Chat     ChatConfig
 }
 
 type LLMConfig struct {
@@ -44,15 +46,25 @@ type DatabaseConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret      string
-	JWTIssuer      string
-	AccessTokenTTL time.Duration
+	JWTSecret       string
+	JWTIssuer       string
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
+}
+
+type ChatConfig struct {
+	RetentionDays      int
+	MaxMessagesPerUser int
 }
 
 func Load() (Config, error) {
 	ttl, err := time.ParseDuration(getenv("ACCESS_TOKEN_TTL", "24h"))
 	if err != nil {
 		return Config{}, fmt.Errorf("parse ACCESS_TOKEN_TTL: %w", err)
+	}
+	refreshTTL, err := time.ParseDuration(getenv("REFRESH_TOKEN_TTL", "720h"))
+	if err != nil {
+		return Config{}, fmt.Errorf("parse REFRESH_TOKEN_TTL: %w", err)
 	}
 
 	env := getenv("APP_ENV", "development")
@@ -66,6 +78,14 @@ func Load() (Config, error) {
 	if dbDSN == "" {
 		return Config{}, errors.New("DB_DSN is required")
 	}
+	chatRetentionDays, err := getenvInt("CHAT_RETENTION_DAYS", 30)
+	if err != nil {
+		return Config{}, err
+	}
+	chatMaxMessagesPerUser, err := getenvInt("CHAT_MAX_MESSAGES_PER_USER", 2000)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
 		Env:  env,
@@ -75,9 +95,10 @@ func Load() (Config, error) {
 			DSN:    dbDSN,
 		},
 		Auth: AuthConfig{
-			JWTSecret:      jwtSecret,
-			JWTIssuer:      getenv("JWT_ISSUER", "healthvision"),
-			AccessTokenTTL: ttl,
+			JWTSecret:       jwtSecret,
+			JWTIssuer:       getenv("JWT_ISSUER", "healthvision"),
+			AccessTokenTTL:  ttl,
+			RefreshTokenTTL: refreshTTL,
 		},
 		LLM: LLMConfig{
 			ModelName: getenv("LLM_MODEL", "gpt-4o-mini"),
@@ -86,6 +107,10 @@ func Load() (Config, error) {
 		},
 		Agent: AgentConfig{
 			RequireWriteToolConfirmation: getenvBool("AGENT_REQUIRE_WRITE_TOOL_CONFIRMATION", true),
+		},
+		Chat: ChatConfig{
+			RetentionDays:      chatRetentionDays,
+			MaxMessagesPerUser: chatMaxMessagesPerUser,
 		},
 	}, nil
 }
@@ -111,4 +136,19 @@ func getenv(key string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func getenvInt(key string, fallback int) (int, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s: %w", key, err)
+	}
+	if value < 0 {
+		return 0, fmt.Errorf("%s must be >= 0", key)
+	}
+	return value, nil
 }

@@ -1,18 +1,18 @@
-import { getToken, removeToken } from './auth'
+import { getRefreshToken, getToken, removeToken, setAuthTokens, setUser } from './auth'
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
-export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string> || {}),
-  }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
+let refreshPromise: Promise<string | null> | null = null
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
+export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  let res = await fetchWithAuth(path, options, getToken())
+
+  if (res.status === 401 && shouldAttemptRefresh(path)) {
+    const refreshedToken = await refreshAccessToken()
+    if (refreshedToken) {
+      res = await fetchWithAuth(path, options, refreshedToken)
+    }
+  }
 
   if (res.status === 401) {
     removeToken()
@@ -26,7 +26,63 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     throw new Error(message)
   }
 
+  if (res.status === 204) {
+    return undefined as T
+  }
   return res.json()
+}
+
+async function fetchWithAuth(path: string, options: RequestInit, token: string | null): Promise<Response> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> || {}),
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  return fetch(`${BASE_URL}${path}`, { ...options, headers })
+}
+
+function shouldAttemptRefresh(path: string): boolean {
+  return path !== '/sessions' && path !== '/sessions/refresh' && !!getRefreshToken()
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return null
+
+  if (!refreshPromise) {
+    refreshPromise = fetch(`${BASE_URL}/sessions/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          removeToken()
+          return null
+        }
+        const body = await res.json() as AuthResponse
+        setAuthTokens(body.access_token, body.refresh_token)
+        setUser(body.user)
+        return body.access_token
+      })
+      .finally(() => {
+        refreshPromise = null
+      })
+  }
+  return refreshPromise
+}
+
+export async function logoutSession(): Promise<void> {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return
+  await fetch(`${BASE_URL}/sessions`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  }).catch(() => {})
 }
 
 export function get<T>(path: string): Promise<T> {
@@ -47,6 +103,10 @@ export interface User {
 
 export interface AuthResponse {
   access_token: string
+  refresh_token: string
+  token_type: string
+  expires_at: string
+  refresh_expires_at: string
   user: User
 }
 
@@ -218,6 +278,10 @@ export function getMessages(conversationID: number): Promise<{ data: ChatMessage
 
 export function deleteConversation(id: number): Promise<void> {
   return post<void>('/chat/delete', { conversation_id: id })
+}
+
+export function clearConversations(): Promise<void> {
+  return post<void>('/chat/clear', {})
 }
 
 // --- Bindings ---

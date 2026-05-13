@@ -16,15 +16,19 @@ type AuthHandler struct {
 }
 
 type registerRequest struct {
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
-	Name     string `json:"name" binding:"omitempty,max=100"`
+	Email    string `json:"email" binding:"required"`
+	Password string `json:"password" binding:"required"`
+	Name     string `json:"name" binding:"required"`
 	IsOld    bool   `json:"is_old"`
 }
 
 type loginRequest struct {
-	Email    string `json:"email" binding:"required,email"`
+	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
 type userResponse struct {
@@ -38,10 +42,12 @@ type userResponse struct {
 }
 
 type authResponse struct {
-	User        userResponse `json:"user"`
-	AccessToken string       `json:"access_token"`
-	TokenType   string       `json:"token_type"`
-	ExpiresAt   string       `json:"expires_at"`
+	User             userResponse `json:"user"`
+	AccessToken      string       `json:"access_token"`
+	RefreshToken     string       `json:"refresh_token"`
+	TokenType        string       `json:"token_type"`
+	ExpiresAt        string       `json:"expires_at"`
+	RefreshExpiresAt string       `json:"refresh_expires_at"`
 }
 
 type meResponse struct {
@@ -54,8 +60,12 @@ func NewAuthHandler(auth *services.AuthService) *AuthHandler {
 
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_request", err.Error())
+	if !bindJSON(c, &req) {
+		return
+	}
+	if !requireEmail(c, &req.Email, "邮箱") ||
+		!requirePassword(c, req.Password, minRegisterPassword) ||
+		!requireString(c, &req.Name, "用户名", 100) {
 		return
 	}
 
@@ -74,8 +84,10 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		httputil.ErrorJSON(c, http.StatusBadRequest, "invalid_request", err.Error())
+	if !bindJSON(c, &req) {
+		return
+	}
+	if !requireEmail(c, &req.Email, "邮箱") || !requirePassword(c, req.Password, 1) {
 		return
 	}
 
@@ -92,6 +104,45 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, toAuthResponse(user, token))
 }
 
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	var req refreshRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	if !requireString(c, &req.RefreshToken, "刷新令牌", 256) {
+		return
+	}
+
+	user, token, err := h.auth.Refresh(c.Request.Context(), req.RefreshToken)
+	if errors.Is(err, services.ErrInvalidRefreshToken) {
+		httputil.ErrorJSON(c, http.StatusUnauthorized, "invalid_refresh_token", "登录已过期，请重新登录")
+		return
+	}
+	if err != nil {
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "refresh_failed", "刷新登录状态失败")
+		return
+	}
+
+	c.JSON(http.StatusOK, toAuthResponse(user, token))
+}
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	var req refreshRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	if !requireString(c, &req.RefreshToken, "刷新令牌", 256) {
+		return
+	}
+
+	if err := h.auth.Logout(c.Request.Context(), req.RefreshToken); err != nil && !errors.Is(err, services.ErrInvalidRefreshToken) {
+		httputil.ErrorJSON(c, http.StatusInternalServerError, "logout_failed", "退出登录失败")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "logged_out"})
+}
+
 func (h *AuthHandler) Me(c *gin.Context) {
 	user, ok := CurrentUser(c)
 	if !ok {
@@ -104,10 +155,12 @@ func (h *AuthHandler) Me(c *gin.Context) {
 
 func toAuthResponse(user *models.User, token services.TokenResult) authResponse {
 	return authResponse{
-		User:        toUserResponse(user),
-		AccessToken: token.AccessToken,
-		TokenType:   token.TokenType,
-		ExpiresAt:   token.ExpiresAt.UTC().Format(http.TimeFormat),
+		User:             toUserResponse(user),
+		AccessToken:      token.AccessToken,
+		RefreshToken:     token.RefreshToken,
+		TokenType:        token.TokenType,
+		ExpiresAt:        token.ExpiresAt.UTC().Format(http.TimeFormat),
+		RefreshExpiresAt: token.RefreshExpiresAt.UTC().Format(http.TimeFormat),
 	}
 }
 
