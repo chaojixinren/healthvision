@@ -11,6 +11,12 @@ const NOTIFICATION_CHANNEL = 'device-proximity'
 let watcherId: string | null = null
 let lastAlertState: 'far' | 'stale' | 'near' | null = null
 
+// Cache for the device location — ESP32 only updates every 30s,
+// so there's no point hitting the server on every GPS callback.
+let cachedDeviceLoc: { latitude: number; longitude: number; timestamp: string } | null = null
+let cachedDeviceLocAt = 0  // when the cache was populated (ms)
+const DEVICE_LOC_CACHE_TTL = 60_000  // refresh at most once per minute
+
 /**
  * Start background proximity monitoring (elderly user only).
  * Uses a foreground service on Android so the OS won't kill the process.
@@ -49,6 +55,8 @@ export async function stopProximityWatch(): Promise<void> {
     watcherId = null
   }
   lastAlertState = null
+  cachedDeviceLoc = null
+  cachedDeviceLocAt = 0
 }
 
 /**
@@ -63,10 +71,16 @@ function loadBackgroundGeolocation(): Promise<typeof import('@capacitor-communit
 
 async function performCheck(phoneLat: number, phoneLng: number): Promise<void> {
   try {
-    const deviceLoc = await getLatestLocation()
+    // Use cached device location if still fresh (within TTL)
+    const now = Date.now()
+    let deviceLoc = cachedDeviceLoc
+    if (!deviceLoc || (now - cachedDeviceLocAt) > DEVICE_LOC_CACHE_TTL) {
+      deviceLoc = await getLatestLocation()
+      cachedDeviceLoc = deviceLoc
+      cachedDeviceLocAt = now
+    }
 
     const deviceTime = new Date(deviceLoc.timestamp).getTime()
-    const now = Date.now()
     if (now - deviceTime > LOCATION_STALE_MS) {
       const newState = 'stale'
       if (newState !== lastAlertState) {
