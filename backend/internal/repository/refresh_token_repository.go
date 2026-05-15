@@ -90,3 +90,33 @@ func (r *RefreshTokenRepository) DeleteExpired(ctx context.Context, before time.
 		Delete(&models.RefreshToken{}).
 		Error
 }
+
+// TouchByUserID updates last_used_at to now for all active (non-revoked,
+// non-expired) refresh tokens belonging to the given user.
+func (r *RefreshTokenRepository) TouchByUserID(ctx context.Context, userID uint, now time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&models.RefreshToken{}).
+		Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, now).
+		Update("last_used_at", now).
+		Error
+}
+
+// FindActiveLastUsedByUserID returns the most recent last_used_at among
+// all active (non-revoked, non-expired) refresh tokens for the given user.
+// Returns ErrNotFound if no active tokens exist.
+func (r *RefreshTokenRepository) FindActiveLastUsedByUserID(ctx context.Context, userID uint) (time.Time, error) {
+	var result struct {
+		LastUsedAt time.Time
+	}
+	err := r.db.WithContext(ctx).Model(&models.RefreshToken{}).
+		Select("MAX(last_used_at) as last_used_at").
+		Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, time.Now()).
+		Scan(&result).Error
+	if err != nil {
+		return time.Time{}, err
+	}
+	if result.LastUsedAt.IsZero() {
+		return time.Time{}, ErrNotFound
+	}
+	return result.LastUsedAt, nil
+}

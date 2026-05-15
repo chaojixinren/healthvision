@@ -48,9 +48,10 @@ type DatabaseConfig struct {
 type AuthConfig struct {
 	JWTSecret           string
 	JWTIssuer           string
-	AccessTokenTTL      time.Duration
+	AccessTokenTTL      time.Duration // absolute maximum lifetime of an access token
 	RefreshTokenTTL     time.Duration
 	MaxSessionsPerUser  int
+	AccessSlidingWindow time.Duration // token expires if unused for this long (e.g. 24h)
 }
 
 type ChatConfig struct {
@@ -59,13 +60,17 @@ type ChatConfig struct {
 }
 
 func Load() (Config, error) {
-	ttl, err := time.ParseDuration(getenv("ACCESS_TOKEN_TTL", "24h"))
+	ttl, err := time.ParseDuration(getenv("ACCESS_TOKEN_TTL", "2160h"))
 	if err != nil {
 		return Config{}, fmt.Errorf("parse ACCESS_TOKEN_TTL: %w", err)
 	}
 	refreshTTL, err := time.ParseDuration(getenv("REFRESH_TOKEN_TTL", "720h"))
 	if err != nil {
 		return Config{}, fmt.Errorf("parse REFRESH_TOKEN_TTL: %w", err)
+	}
+	slidingWindow, err := time.ParseDuration(getenv("ACCESS_SLIDING_WINDOW", "24h"))
+	if err != nil {
+		return Config{}, fmt.Errorf("parse ACCESS_SLIDING_WINDOW: %w", err)
 	}
 
 	env := getenv("APP_ENV", "development")
@@ -101,11 +106,12 @@ func Load() (Config, error) {
 			DSN:    dbDSN,
 		},
 		Auth: AuthConfig{
-			JWTSecret:          jwtSecret,
-			JWTIssuer:          getenv("JWT_ISSUER", "healthvision"),
-			AccessTokenTTL:     ttl,
-			RefreshTokenTTL:    refreshTTL,
-			MaxSessionsPerUser: maxSessions,
+			JWTSecret:           jwtSecret,
+			JWTIssuer:           getenv("JWT_ISSUER", "healthvision"),
+			AccessTokenTTL:      ttl,
+			RefreshTokenTTL:     refreshTTL,
+			MaxSessionsPerUser:  maxSessions,
+			AccessSlidingWindow: slidingWindow,
 		},
 		LLM: LLMConfig{
 			ModelName: getenv("LLM_MODEL", "gpt-4o-mini"),

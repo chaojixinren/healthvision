@@ -40,6 +40,8 @@ type RefreshTokenStore interface {
 	DeleteExpired(ctx context.Context, before time.Time) error
 	CountActiveByUserID(ctx context.Context, userID uint) (int64, error)
 	RevokeOldestByUserID(ctx context.Context, userID uint, n int, revokedAt time.Time) (int64, error)
+	TouchByUserID(ctx context.Context, userID uint, now time.Time) error
+	FindActiveLastUsedByUserID(ctx context.Context, userID uint) (time.Time, error)
 }
 
 type AuthService struct {
@@ -197,6 +199,26 @@ func (s *AuthService) ParseToken(tokenString string) (*Claims, error) {
 	return claims, nil
 }
 
+// IsWithinSlidingWindow checks whether the user has been active within the
+// configured sliding window.  It looks up the most recent last_used_at of any
+// active refresh token for this user.  If the user has no active sessions at
+// all, the token is considered expired.
+func (s *AuthService) IsWithinSlidingWindow(ctx context.Context, userID uint) bool {
+	lastUsed, err := s.refreshTokens.FindActiveLastUsedByUserID(ctx, userID)
+	if err != nil {
+		// No active refresh token → session is gone → deny.
+		return false
+	}
+	return time.Since(lastUsed) <= s.cfg.AccessSlidingWindow
+}
+
+// TouchActivity updates the last_used_at timestamp for all active refresh
+// tokens of the given user.  This should be called on every authenticated
+// request to keep the sliding window alive.
+func (s *AuthService) TouchActivity(ctx context.Context, userID uint) error {
+	return s.refreshTokens.TouchByUserID(ctx, userID, time.Now())
+}
+
 func (s *AuthService) issueTokenPair(ctx context.Context, user *models.User) (TokenResult, error) {
 	access, err := s.issueAccessToken(user)
 	if err != nil {
@@ -251,10 +273,12 @@ func (s *AuthService) issueRefreshToken(ctx context.Context, user *models.User) 
 		return "", time.Time{}, ErrInvalidRefreshToken
 	}
 	expiresAt := time.Now().Add(s.cfg.RefreshTokenTTL)
+	now := time.Now()
 	if err := s.refreshTokens.Create(ctx, &models.RefreshToken{
-		UserID:    user.ID,
-		TokenHash: hash,
-		ExpiresAt: expiresAt,
+		UserID:     user.ID,
+		TokenHash:  hash,
+		ExpiresAt:  expiresAt,
+		LastUsedAt: now,
 	}); err != nil {
 		return "", time.Time{}, err
 	}

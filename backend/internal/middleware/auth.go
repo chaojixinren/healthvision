@@ -23,7 +23,14 @@ type UserFinder interface {
 	FindByID(ctx context.Context, id uint) (*models.User, error)
 }
 
-func AuthRequired(parser TokenParser, users UserFinder) gin.HandlerFunc {
+// SlidingWindowChecker is implemented by AuthService to support sliding
+// token expiration.  The middleware calls these on every authenticated request.
+type SlidingWindowChecker interface {
+	IsWithinSlidingWindow(ctx context.Context, userID uint) bool
+	TouchActivity(ctx context.Context, userID uint) error
+}
+
+func AuthRequired(parser TokenParser, users UserFinder, checker SlidingWindowChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenString, ok := bearerToken(c.GetHeader("Authorization"))
 		if !ok {
@@ -34,6 +41,16 @@ func AuthRequired(parser TokenParser, users UserFinder) gin.HandlerFunc {
 		claims, err := parser.ParseToken(tokenString)
 		if err != nil {
 			httputil.Unauthorized(c, "令牌无效或已过期，请重新登录")
+			return
+		}
+
+		// Sliding window check: even if the JWT exp is far in the future,
+		// the token is invalid if the user hasn't been active within the
+		// sliding window (e.g. 24 hours).  This keeps ESP32 tokens alive
+		// as long as the device keeps reporting, but expires them if the
+		// device goes silent.
+		if !checker.IsWithinSlidingWindow(c.Request.Context(), claims.UserID) {
+			httputil.Unauthorized(c, "会话已过期，请重新登录")
 			return
 		}
 
@@ -48,6 +65,11 @@ func AuthRequired(parser TokenParser, users UserFinder) gin.HandlerFunc {
 		}
 
 		handlers.SetCurrentUser(c, user)
+
+		// Best-effort: update last_used_at so the sliding window extends.
+		// Errors are ignored to avoid blocking the request.
+		_ = checker.TouchActivity(c.Request.Context(), claims.UserID)
+
 		c.Next()
 	}
 }

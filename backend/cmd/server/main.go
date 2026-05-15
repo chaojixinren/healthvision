@@ -47,7 +47,7 @@ func main() {
 	refreshTokenRepo := repository.NewRefreshTokenRepository(db)
 	authService := services.NewAuthService(userRepo, refreshTokenRepo, cfg.Auth)
 	authHandler := handlers.NewAuthHandler(authService)
-	authMiddleware := middleware.AuthRequired(authService, userRepo)
+	authMiddleware := middleware.AuthRequired(authService, userRepo, authService)
 
 	medicineRepo := repository.NewMedicineRepository(db)
 	reminderRepo := repository.NewReminderRepository(db)

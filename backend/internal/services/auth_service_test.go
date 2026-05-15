@@ -16,11 +16,12 @@ func TestRefreshRotatesRefreshToken(t *testing.T) {
 	users := newAuthUserStore()
 	refreshTokens := newAuthRefreshTokenStore()
 	svc := NewAuthService(users, refreshTokens, config.AuthConfig{
-		JWTSecret:          "test-secret",
-		JWTIssuer:          "healthvision-test",
-		AccessTokenTTL:     time.Minute,
-		RefreshTokenTTL:    time.Hour,
-		MaxSessionsPerUser: 5,
+		JWTSecret:           "test-secret",
+		JWTIssuer:           "healthvision-test",
+		AccessTokenTTL:      time.Minute,
+		RefreshTokenTTL:     time.Hour,
+		MaxSessionsPerUser:  5,
+		AccessSlidingWindow: 24 * time.Hour,
 	})
 
 	user, issued, err := svc.Register(ctx, "test@example.com", "password123", "测试用户", false)
@@ -55,11 +56,12 @@ func TestMaxSessionsPerUser(t *testing.T) {
 	users := newAuthUserStore()
 	refreshTokens := newAuthRefreshTokenStore()
 	svc := NewAuthService(users, refreshTokens, config.AuthConfig{
-		JWTSecret:          "test-secret",
-		JWTIssuer:          "healthvision-test",
-		AccessTokenTTL:     time.Minute,
-		RefreshTokenTTL:    time.Hour,
-		MaxSessionsPerUser: 2, // Only 2 concurrent sessions allowed
+		JWTSecret:           "test-secret",
+		JWTIssuer:           "healthvision-test",
+		AccessTokenTTL:      time.Minute,
+		RefreshTokenTTL:     time.Hour,
+		MaxSessionsPerUser:  2, // Only 2 concurrent sessions allowed
+		AccessSlidingWindow: 24 * time.Hour,
 	})
 
 	// Session 1: Register
@@ -198,7 +200,6 @@ func (s *authRefreshTokenStore) RevokeOldestByUserID(_ context.Context, userID u
 	if n <= 0 {
 		return 0, nil
 	}
-	// Collect active tokens for this user, sorted by created_at ascending.
 	type entry struct {
 		hash      string
 		createdAt time.Time
@@ -209,7 +210,6 @@ func (s *authRefreshTokenStore) RevokeOldestByUserID(_ context.Context, userID u
 			entries = append(entries, entry{hash: h, createdAt: token.CreatedAt})
 		}
 	}
-	// Sort by created_at ascending (simple insertion sort — n is tiny in tests).
 	for i := 1; i < len(entries); i++ {
 		for j := i; j > 0 && entries[j].createdAt.Before(entries[j-1].createdAt); j-- {
 			entries[j], entries[j-1] = entries[j-1], entries[j]
@@ -223,4 +223,68 @@ func (s *authRefreshTokenStore) RevokeOldestByUserID(_ context.Context, userID u
 		}
 	}
 	return revoked, nil
+}
+
+func (s *authRefreshTokenStore) TouchByUserID(_ context.Context, userID uint, now time.Time) error {
+	for _, token := range s.byHash {
+		if token.UserID == userID && token.RevokedAt == nil && token.ExpiresAt.After(now) {
+			token.LastUsedAt = now
+		}
+	}
+	return nil
+}
+
+func (s *authRefreshTokenStore) FindActiveLastUsedByUserID(_ context.Context, userID uint) (time.Time, error) {
+	var latest time.Time
+	now := time.Now()
+	for _, token := range s.byHash {
+		if token.UserID == userID && token.RevokedAt == nil && token.ExpiresAt.After(now) {
+			if token.LastUsedAt.After(latest) {
+				latest = token.LastUsedAt
+			}
+		}
+	}
+	if latest.IsZero() {
+		return time.Time{}, repository.ErrNotFound
+	}
+	return latest, nil
+}
+
+func TestSlidingWindow(t *testing.T) {
+	ctx := context.Background()
+	users := newAuthUserStore()
+	refreshTokens := newAuthRefreshTokenStore()
+	svc := NewAuthService(users, refreshTokens, config.AuthConfig{
+		JWTSecret:           "test-secret",
+		JWTIssuer:           "healthvision-test",
+		AccessTokenTTL:      90 * 24 * time.Hour, // absolute max: 90 days
+		RefreshTokenTTL:     30 * 24 * time.Hour,
+		MaxSessionsPerUser:  5,
+		AccessSlidingWindow: time.Hour, // token expires if unused for 1 hour
+	})
+
+	// Register a user — this creates a refresh token with LastUsedAt = now
+	user, _, err := svc.Register(ctx, "slide@example.com", "password123", "滑动测试", false)
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+
+	// Should be within sliding window right after registration
+	if !svc.IsWithinSlidingWindow(ctx, user.ID) {
+		t.Fatal("expected user to be within sliding window right after registration")
+	}
+
+	// TouchActivity should keep the window alive
+	time.Sleep(10 * time.Millisecond)
+	if err := svc.TouchActivity(ctx, user.ID); err != nil {
+		t.Fatalf("TouchActivity: %v", err)
+	}
+	if !svc.IsWithinSlidingWindow(ctx, user.ID) {
+		t.Fatal("expected user to be within sliding window after touch")
+	}
+
+	// User with no active refresh tokens should be outside the window
+	if svc.IsWithinSlidingWindow(ctx, 9999) {
+		t.Fatal("expected non-existent user to be outside sliding window")
+	}
 }
