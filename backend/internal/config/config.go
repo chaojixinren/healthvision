@@ -46,10 +46,11 @@ type DatabaseConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret       string
-	JWTIssuer       string
-	AccessTokenTTL  time.Duration
-	RefreshTokenTTL time.Duration
+	JWTSecret           string
+	JWTIssuer           string
+	AccessTokenTTL      time.Duration
+	RefreshTokenTTL     time.Duration
+	MaxSessionsPerUser  int
 }
 
 type ChatConfig struct {
@@ -87,6 +88,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	maxSessions, err := getenvInt("MAX_SESSIONS_PER_USER", 5)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
 		Env:  env,
 		Port: getenv("PORT", "8080"),
@@ -95,10 +101,11 @@ func Load() (Config, error) {
 			DSN:    dbDSN,
 		},
 		Auth: AuthConfig{
-			JWTSecret:       jwtSecret,
-			JWTIssuer:       getenv("JWT_ISSUER", "healthvision"),
-			AccessTokenTTL:  ttl,
-			RefreshTokenTTL: refreshTTL,
+			JWTSecret:          jwtSecret,
+			JWTIssuer:          getenv("JWT_ISSUER", "healthvision"),
+			AccessTokenTTL:     ttl,
+			RefreshTokenTTL:    refreshTTL,
+			MaxSessionsPerUser: maxSessions,
 		},
 		LLM: LLMConfig{
 			ModelName: getenv("LLM_MODEL", "gpt-4o-mini"),

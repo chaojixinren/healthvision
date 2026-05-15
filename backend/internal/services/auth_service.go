@@ -38,6 +38,8 @@ type RefreshTokenStore interface {
 	FindByHash(ctx context.Context, hash string) (*models.RefreshToken, error)
 	RevokeByHash(ctx context.Context, hash string, revokedAt time.Time) (bool, error)
 	DeleteExpired(ctx context.Context, before time.Time) error
+	CountActiveByUserID(ctx context.Context, userID uint) (int64, error)
+	RevokeOldestByUserID(ctx context.Context, userID uint, n int, revokedAt time.Time) (int64, error)
 }
 
 type AuthService struct {
@@ -256,6 +258,19 @@ func (s *AuthService) issueRefreshToken(ctx context.Context, user *models.User) 
 	}); err != nil {
 		return "", time.Time{}, err
 	}
+
+	// Enforce max concurrent sessions — revoke the oldest tokens that
+	// exceed the limit so the most recent session (the one we just
+	// created) is always preserved.
+	if s.cfg.MaxSessionsPerUser > 0 {
+		active, err := s.refreshTokens.CountActiveByUserID(ctx, user.ID)
+		if err == nil && active > int64(s.cfg.MaxSessionsPerUser) {
+			excess := int(active) - s.cfg.MaxSessionsPerUser
+			// Best-effort; ignore errors to avoid blocking login.
+			_ , _ = s.refreshTokens.RevokeOldestByUserID(ctx, user.ID, excess, time.Now())
+		}
+	}
+
 	return raw, expiresAt, nil
 }
 
