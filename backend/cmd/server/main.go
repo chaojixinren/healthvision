@@ -104,7 +104,11 @@ func main() {
 	confirmationService := services.NewConfirmationService(confirmationRepo, bindingRepo)
 	confirmationHandler := handlers.NewConfirmationHandler(confirmationService, medicineRepo, userRepo)
 
-	engine := router.New(authHandler, medicineHandler, reminderHandler, chatHandler, bindingHandler, confirmationHandler, authMiddleware)
+	locationRepo := repository.NewLocationRepository(db)
+	locationService := services.NewLocationService(locationRepo)
+	locationHandler := handlers.NewLocationHandler(locationService)
+
+	engine := router.New(authHandler, medicineHandler, reminderHandler, chatHandler, bindingHandler, confirmationHandler, locationHandler, authMiddleware)
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           engine,

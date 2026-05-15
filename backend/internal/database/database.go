@@ -18,7 +18,7 @@ func Open(cfg config.DatabaseConfig) (*gorm.DB, error) {
 }
 
 func Migrate(db *gorm.DB) error {
-	if err := db.AutoMigrate(&models.User{}, &models.RefreshToken{}, &models.Medicine{}, &models.Reminder{}, &models.Conversation{}, &models.ChatMessage{}, &models.Binding{}, &models.Confirmation{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.RefreshToken{}, &models.Medicine{}, &models.Reminder{}, &models.Conversation{}, &models.ChatMessage{}, &models.Binding{}, &models.Confirmation{}, &models.Location{}); err != nil {
 		return err
 	}
 	// Backfill default values for new reminder recurrence columns added 2026-05.
