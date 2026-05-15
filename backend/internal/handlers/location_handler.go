@@ -39,12 +39,6 @@ type locationResponse struct {
 	UpdatedAt string  `json:"updated_at"`
 }
 
-type checkDistanceResponse struct {
-	DistanceMeters float64 `json:"distance_meters"`
-	TooFar         bool    `json:"too_far"`
-	Stale          bool    `json:"stale"`
-}
-
 // --- handlers ---
 
 func (h *LocationHandler) Report(c *gin.Context) {
@@ -106,38 +100,6 @@ func (h *LocationHandler) GetLatest(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, toLocationResponse(loc))
-}
-
-func (h *LocationHandler) CheckDistance(c *gin.Context) {
-	user, ok := CurrentUser(c)
-	if !ok {
-		httputil.Unauthorized(c, "请先登录")
-		return
-	}
-
-	var req struct {
-		Latitude  float64 `json:"latitude" binding:"required"`
-		Longitude float64 `json:"longitude" binding:"required"`
-	}
-	if !bindJSON(c, &req) {
-		return
-	}
-
-	distance, tooFar, stale, err := h.svc.CheckDistance(c.Request.Context(), user.ID, req.Latitude, req.Longitude)
-	if errors.Is(err, services.ErrLocationNotFound) {
-		httputil.ErrorJSON(c, http.StatusNotFound, "not_found", "暂无设备位置记录")
-		return
-	}
-	if err != nil {
-		httputil.ErrorJSON(c, http.StatusInternalServerError, "check_failed", "距离检测失败")
-		return
-	}
-
-	c.JSON(http.StatusOK, checkDistanceResponse{
-		DistanceMeters: distance,
-		TooFar:         tooFar,
-		Stale:          stale,
-	})
 }
 
 // --- helpers ---

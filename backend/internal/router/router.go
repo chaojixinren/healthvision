@@ -68,7 +68,6 @@ func New(authHandler *handlers.AuthHandler, medicineHandler *handlers.MedicineHa
 
 			protected.POST("/locations", locationHandler.Report)
 			protected.GET("/locations/latest", locationHandler.GetLatest)
-			protected.POST("/locations/check", locationHandler.CheckDistance)
 		}
 	}
 
