@@ -1,16 +1,21 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   getMe,
   searchUsers,
   changeIdentity,
   logoutSession,
+  getLatestLocation,
   type User,
   type Binding,
+  type Location,
 } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { useCareStore } from '../stores/care'
+import { haversine } from '../services/geo'
+import { Geolocation } from '@capacitor/geolocation'
+import { Capacitor } from '@capacitor/core'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -26,6 +31,63 @@ const searching = ref(false)
 const bindingLoading = ref(false)
 const identityLoading = ref(false)
 
+// --- 药箱状态 ---
+const STALE_MS = 2 * 60 * 1000
+const deviceLoc = ref<Location | null>(null)
+const deviceOnline = ref<boolean | null>(null)   // null = unknown
+const deviceDistance = ref<number | null>(null)    // metres, null = unknown
+const deviceLastSeen = ref<string>('')             // human-readable
+let deviceRefreshTimer: ReturnType<typeof setInterval> | null = null
+
+async function refreshDeviceStatus() {
+  try {
+    const loc = await getLatestLocation()
+    deviceLoc.value = loc
+
+    const age = Date.now() - new Date(loc.timestamp).getTime()
+    deviceOnline.value = age <= STALE_MS
+    deviceLastSeen.value = formatRelativeTime(loc.timestamp)
+
+    // Try to get current phone position for distance
+    if (Capacitor.getPlatform() === 'android') {
+      try {
+        const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 5000 })
+        deviceDistance.value = haversine(
+          pos.coords.latitude, pos.coords.longitude,
+          loc.latitude, loc.longitude,
+        )
+      } catch {
+        deviceDistance.value = null
+      }
+    } else {
+      // Web: distance not available (no GPS)
+      deviceDistance.value = null
+    }
+  } catch {
+    deviceLoc.value = null
+    deviceOnline.value = false
+    deviceDistance.value = null
+    deviceLastSeen.value = ''
+  }
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const seconds = Math.floor(diff / 1000)
+  if (seconds < 60) return '刚刚'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} 分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时前`
+  const days = Math.floor(hours / 24)
+  return `${days} 天前`
+}
+
+function formatDistance(m: number): string {
+  if (m < 1000) return `${Math.round(m)} 米`
+  return `${(m / 1000).toFixed(1)} 公里`
+}
+
 onMounted(async () => {
   try {
     const [u] = await Promise.all([getMe(), care.loadBindings()])
@@ -34,6 +96,19 @@ onMounted(async () => {
     // auth guard handles redirect
   } finally {
     loading.value = false
+  }
+
+  // Load pillbox status for elderly users
+  if (auth.isOld) {
+    await refreshDeviceStatus()
+    deviceRefreshTimer = setInterval(refreshDeviceStatus, 30_000)
+  }
+})
+
+onUnmounted(() => {
+  if (deviceRefreshTimer) {
+    clearInterval(deviceRefreshTimer)
+    deviceRefreshTimer = null
   }
 })
 
@@ -183,6 +258,56 @@ const activeBindings = computed(() => bindings.value.filter(b => b.status === 'a
             <span class="detail-value">{{ formatDate(user.created_at) }}</span>
           </li>
         </ul>
+      </div>
+
+      <!-- 我的药箱（仅老人端） -->
+      <div v-if="user.is_old" class="card-lg device-card">
+        <h3>我的药箱</h3>
+        <ul class="detail-list">
+          <li>
+            <span class="detail-label">连接状态</span>
+            <span class="detail-value device-status">
+              <span v-if="deviceOnline === null" class="status-dot unknown"></span>
+              <span v-else-if="deviceOnline" class="status-dot online"></span>
+              <span v-else class="status-dot offline"></span>
+              {{ deviceOnline === null ? '检测中...' : deviceOnline ? '在线' : '离线' }}
+            </span>
+          </li>
+          <li>
+            <span class="detail-label">最后上报</span>
+            <span class="detail-value">{{ deviceLastSeen || '暂无数据' }}</span>
+          </li>
+          <li v-if="deviceDistance !== null">
+            <span class="detail-label">距离您</span>
+            <span class="detail-value">{{ formatDistance(deviceDistance) }}</span>
+          </li>
+        </ul>
+        <p v-if="deviceOnline === false" class="device-hint">
+          药箱设备已离线，请检查设备是否开机并连接网络
+        </p>
+
+        <details class="device-guide">
+          <summary>如何连接药盒</summary>
+          <ol class="guide-steps">
+            <li>
+              <strong>接通电源</strong>
+              <p>将药盒接通电源，等待指示灯亮起</p>
+            </li>
+            <li>
+              <strong>连接 WiFi</strong>
+              <p>首次使用需通过电脑配置药盒的 WiFi 网络，请参考包装盒内的配置指南</p>
+            </li>
+            <li>
+              <strong>绑定账号</strong>
+              <p>配置时输入您在本 App 注册的邮箱和密码，药盒即可与您的账号关联</p>
+            </li>
+            <li>
+              <strong>确认连接</strong>
+              <p>配置完成后，药盒指示灯常亮表示连接成功，本页面会自动显示设备在线状态。如果显示离线，请检查药盒是否通电且 WiFi 可用</p>
+            </li>
+          </ol>
+          <p class="guide-note">药盒会自动定时上报位置，当您与药盒距离超过 50 米时，App 将提醒您携带药箱</p>
+        </details>
       </div>
 
       <!-- 身份切换 -->
@@ -563,5 +688,106 @@ h3 {
   width: 100%;
   padding: 0.75rem;
   margin-top: 0.5rem;
+}
+
+/* 药箱状态 */
+.device-card h3 {
+  font-size: 1.125rem;
+  margin-bottom: 0.75rem;
+}
+
+.device-status {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.status-dot.online {
+  background: #4caf50;
+  box-shadow: 0 0 4px rgba(76, 175, 80, 0.5);
+}
+
+.status-dot.offline {
+  background: #bdbdbd;
+}
+
+.status-dot.unknown {
+  background: #ff9800;
+  box-shadow: 0 0 4px rgba(255, 152, 0, 0.4);
+}
+
+.device-hint {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: #e65100;
+  padding: 0.5rem 0.75rem;
+  background: #fff3e0;
+  border-radius: var(--radius);
+}
+
+/* 药盒连接说明 */
+.device-guide {
+  margin-top: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.device-guide summary {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--primary);
+  background: var(--bg);
+  user-select: none;
+}
+
+.device-guide summary:hover {
+  background: var(--border);
+}
+
+.guide-steps {
+  padding: 0.75rem 1rem 0.75rem 2rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--foreground);
+}
+
+.guide-steps li {
+  margin-bottom: 0.75rem;
+}
+
+.guide-steps li:last-child {
+  margin-bottom: 0;
+}
+
+.guide-steps strong {
+  display: block;
+  margin-bottom: 0.125rem;
+  font-size: 0.875rem;
+}
+
+.guide-steps p {
+  margin: 0;
+  color: #8a7b70;
+}
+
+.guide-note {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: #8a7b70;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
 }
 </style>

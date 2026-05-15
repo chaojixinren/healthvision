@@ -2,6 +2,7 @@
 import { useRouter, useRoute } from 'vue-router'
 import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { requestPermissions, ensureExactAlarms, addListeners, removeAllListeners } from './services/notifications'
+import { startProximityWatch, stopProximityWatch } from './services/device-proximity'
 import { useAuthStore } from './stores/auth'
 import { useCareStore } from './stores/care'
 import { useNetworkStore } from './stores/network'
@@ -32,6 +33,9 @@ onMounted(async () => {
   addListeners(() => {
     router.push('/reminders')
   })
+  if (auth.isAuthenticated && auth.isOld) {
+    startProximityWatch().catch(() => {})
+  }
 })
 
 watch(() => network.connected, (connected, wasConnected) => {
@@ -44,13 +48,18 @@ watch(() => auth.isAuthenticated, (loggedIn) => {
   if (loggedIn) {
     care.refreshPendingSyncCount()
     prepareNotifications()
+    if (auth.isOld) {
+      startProximityWatch().catch(() => {})
+    }
   } else {
     care.reset()
+    stopProximityWatch()
   }
 })
 
 onUnmounted(() => {
   removeAllListeners()
+  stopProximityWatch()
   network.dispose().catch(() => {})
 })
 

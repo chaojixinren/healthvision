@@ -323,3 +323,19 @@ export function deleteBinding(id: number): Promise<{ message: string }> {
 export function changeIdentity(): Promise<{ user: User; message: string }> {
   return request<{ user: User; message: string }>('/users/me/identity', { method: 'PUT' })
 }
+
+// --- Locations ---
+
+export interface Location {
+  id: number
+  latitude: number
+  longitude: number
+  altitude: number
+  timestamp: string
+  created_at: string
+  updated_at: string
+}
+
+export function getLatestLocation(): Promise<Location> {
+  return get<Location>('/locations/latest')
+}
