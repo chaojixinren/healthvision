@@ -1,62 +1,70 @@
-import { Geolocation, type Position } from '@capacitor/geolocation'
 import { Capacitor } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { getLatestLocation } from './api'
 import { haversine } from './geo'
 
-const CHECK_INTERVAL_MS = 60_000       // 60 seconds
 const ALERT_DISTANCE_METERS = 50
-const LOCATION_STALE_MS = 2 * 60_000   // 2 minutes — same as backend LocationExpiry
-const NOTIFICATION_ID = 99999          // fixed ID so we don't stack duplicates
+const LOCATION_STALE_MS = 2 * 60_000
+const NOTIFICATION_ID = 99999
 const NOTIFICATION_CHANNEL = 'device-proximity'
 
-let timer: ReturnType<typeof setInterval> | null = null
+let watcherId: string | null = null
 let lastAlertState: 'far' | 'stale' | 'near' | null = null
 
 /**
- * Start periodic proximity checks (elderly user only).
- * Works on Android via Capacitor; on web it's a no-op.
+ * Start background proximity monitoring (elderly user only).
+ * Uses a foreground service on Android so the OS won't kill the process.
+ * On web it's a no-op.
  */
 export async function startProximityWatch(): Promise<void> {
   stopProximityWatch()
 
   if (Capacitor.getPlatform() !== 'android') return
 
-  // Request location permission first
-  const perm = await Geolocation.checkPermissions()
-  if (perm.location === 'prompt' || perm.location === 'prompt-with-rationale') {
-    const req = await Geolocation.requestPermissions()
-    if (req.location !== 'granted') return
-  }
-  if (perm.location !== 'granted') return
+  // Lazy-load the native plugin — avoids Vite trying to resolve it in the browser.
+  // The dynamic import is guarded by the platform check above, so it only
+  // executes on real Android devices where the plugin is available.
+  const { BackgroundGeolocation } = await loadBackgroundGeolocation()
 
-  // Run first check immediately, then periodically
-  await performCheck()
-  timer = setInterval(performCheck, CHECK_INTERVAL_MS)
+  watcherId = await BackgroundGeolocation.addWatcher(
+    {
+      backgroundMessage: '正在监测您与药箱的距离',
+      backgroundTitle: '药箱距离监测',
+      requestPermissions: true,
+      stale: false,
+      distanceFilter: 10,
+    },
+    (position, error) => {
+      if (error) return
+      if (!position) return
+      performCheck(position.latitude, position.longitude)
+    },
+  )
 }
 
-export function stopProximityWatch(): void {
-  if (timer !== null) {
-    clearInterval(timer)
-    timer = null
+export async function stopProximityWatch(): Promise<void> {
+  if (watcherId !== null) {
+    const { BackgroundGeolocation } = await loadBackgroundGeolocation()
+    await BackgroundGeolocation.removeWatcher({ id: watcherId })
+    watcherId = null
   }
   lastAlertState = null
 }
 
-async function performCheck(): Promise<void> {
+/**
+ * Load the BackgroundGeolocation plugin at runtime.
+ * Uses a string-based import() so Vite won't statically analyse it.
+ */
+function loadBackgroundGeolocation(): Promise<typeof import('@capacitor-community/background-geolocation')> {
+  // The variable prevents Vite from tracing the import at build time.
+  const mod = '@capacitor-community/background-geolocation'
+  return import(/* @vite-ignore */ mod)
+}
+
+async function performCheck(phoneLat: number, phoneLng: number): Promise<void> {
   try {
-    const position: Position = await Geolocation.getCurrentPosition({
-      enableHighAccuracy: true,
-      timeout: 10000,
-    })
-
-    const phoneLat = position.coords.latitude
-    const phoneLng = position.coords.longitude
-
-    // Fetch device (pillbox) location from server
     const deviceLoc = await getLatestLocation()
 
-    // Check staleness — device location too old means ESP32 is offline
     const deviceTime = new Date(deviceLoc.timestamp).getTime()
     const now = Date.now()
     if (now - deviceTime > LOCATION_STALE_MS) {
@@ -71,11 +79,9 @@ async function performCheck(): Promise<void> {
       return
     }
 
-    // Calculate distance locally (Haversine)
     const dist = haversine(phoneLat, phoneLng, deviceLoc.latitude, deviceLoc.longitude)
     const newState = dist > ALERT_DISTANCE_METERS ? 'far' : 'near'
 
-    // Only notify on state transitions to avoid spamming
     if (newState !== lastAlertState) {
       if (newState === 'far') {
         await sendNotification(
@@ -91,7 +97,7 @@ async function performCheck(): Promise<void> {
       lastAlertState = newState
     }
   } catch {
-    // Silently ignore — GPS might be unavailable, network down, etc.
+    // Silently ignore
   }
 }
 
