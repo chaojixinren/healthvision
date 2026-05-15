@@ -22,7 +22,7 @@ services:
       args:
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
         GOSUMDB: ${GOSUMDB:-sum.golang.google.cn}
-    image: ${BACKEND_IMAGE:-healthvision-backend:latest}
+    image: ${BACKEND_IMAGE:-chaojixinren/healthvision:v1.3}
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT:-8080}:8080"
@@ -33,7 +33,8 @@ services:
       DB_DSN: root:${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-healthvision}?charset=utf8mb4&parseTime=True&loc=Local
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
       JWT_ISSUER: ${JWT_ISSUER:-healthvision}
-      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-24h}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-2160h}
+      ACCESS_SLIDING_WINDOW: ${ACCESS_SLIDING_WINDOW:-24h}
       REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-720h}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
