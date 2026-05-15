@@ -1,7 +1,8 @@
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { getLatestLocation } from './api'
 import { haversine } from './geo'
+import type { BackgroundGeolocationPlugin } from '@capacitor-community/background-geolocation'
 
 const ALERT_DISTANCE_METERS = 50
 const LOCATION_STALE_MS = 2 * 60_000
@@ -17,6 +18,16 @@ let cachedDeviceLoc: { latitude: number; longitude: number; timestamp: string } 
 let cachedDeviceLocAt = 0  // when the cache was populated (ms)
 const DEVICE_LOC_CACHE_TTL = 60_000  // refresh at most once per minute
 
+// Lazy reference to the native plugin — only created on Android.
+let bgGeo: BackgroundGeolocationPlugin | null = null
+
+function getBackgroundGeolocation(): BackgroundGeolocationPlugin {
+  if (!bgGeo) {
+    bgGeo = registerPlugin<BackgroundGeolocationPlugin>('BackgroundGeolocation')
+  }
+  return bgGeo
+}
+
 /**
  * Start background proximity monitoring (elderly user only).
  * Uses a foreground service on Android so the OS won't kill the process.
@@ -27,12 +38,9 @@ export async function startProximityWatch(): Promise<void> {
 
   if (Capacitor.getPlatform() !== 'android') return
 
-  // Lazy-load the native plugin — avoids Vite trying to resolve it in the browser.
-  // The dynamic import is guarded by the platform check above, so it only
-  // executes on real Android devices where the plugin is available.
-  const { BackgroundGeolocation } = await loadBackgroundGeolocation()
+  const plugin = getBackgroundGeolocation()
 
-  watcherId = await BackgroundGeolocation.addWatcher(
+  watcherId = await plugin.addWatcher(
     {
       backgroundMessage: '正在监测您与药箱的距离',
       backgroundTitle: '药箱距离监测',
@@ -40,7 +48,7 @@ export async function startProximityWatch(): Promise<void> {
       stale: false,
       distanceFilter: 10,
     },
-    (position, error) => {
+    (position: any, error: any) => {
       if (error) return
       if (!position) return
       performCheck(position.latitude, position.longitude)
@@ -50,23 +58,13 @@ export async function startProximityWatch(): Promise<void> {
 
 export async function stopProximityWatch(): Promise<void> {
   if (watcherId !== null) {
-    const { BackgroundGeolocation } = await loadBackgroundGeolocation()
-    await BackgroundGeolocation.removeWatcher({ id: watcherId })
+    const plugin = getBackgroundGeolocation()
+    await plugin.removeWatcher({ id: watcherId })
     watcherId = null
   }
   lastAlertState = null
   cachedDeviceLoc = null
   cachedDeviceLocAt = 0
-}
-
-/**
- * Load the BackgroundGeolocation plugin at runtime.
- * Uses a string-based import() so Vite won't statically analyse it.
- */
-function loadBackgroundGeolocation(): Promise<typeof import('@capacitor-community/background-geolocation')> {
-  // The variable prevents Vite from tracing the import at build time.
-  const mod = '@capacitor-community/background-geolocation'
-  return import(/* @vite-ignore */ mod)
 }
 
 async function performCheck(phoneLat: number, phoneLng: number): Promise<void> {
