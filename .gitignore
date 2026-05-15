@@ -3,11 +3,13 @@ backend/.env.production
 backend/data/
 backend/dist/
 backend/tmp/
+backend/node_modules/
 backend/*.db
 backend/*.db-shm
 backend/*.db-wal
 backend/.gotestcache/
 backend/server
+HealthVision_ESP32/
 .gocache/
 .DS_Store
 .claude
