@@ -106,7 +106,7 @@ func (r *RefreshTokenRepository) TouchByUserID(ctx context.Context, userID uint,
 // Returns ErrNotFound if no active tokens exist.
 func (r *RefreshTokenRepository) FindActiveLastUsedByUserID(ctx context.Context, userID uint) (time.Time, error) {
 	var result struct {
-		LastUsedAt time.Time
+		LastUsedAt *string
 	}
 	err := r.db.WithContext(ctx).Model(&models.RefreshToken{}).
 		Select("MAX(last_used_at) as last_used_at").
@@ -115,8 +115,24 @@ func (r *RefreshTokenRepository) FindActiveLastUsedByUserID(ctx context.Context,
 	if err != nil {
 		return time.Time{}, err
 	}
-	if result.LastUsedAt.IsZero() {
+	if result.LastUsedAt == nil || *result.LastUsedAt == "" {
 		return time.Time{}, ErrNotFound
 	}
-	return result.LastUsedAt, nil
+	// Depending on MySQL or SQLite, the time layout might differ. GORM/SQLite usually uses RFC3339 or a similar format.
+	// For safety, parse using standard SQL datetime format or RFC3339.
+	parsedTime, parseErr := time.Parse(time.RFC3339Nano, *result.LastUsedAt)
+	if parseErr != nil {
+		parsedTime, parseErr = time.Parse(time.DateTime, *result.LastUsedAt)
+		if parseErr != nil {
+			parsedTime, parseErr = time.Parse("2006-01-02 15:04:05.999999999-07:00", *result.LastUsedAt)
+			if parseErr != nil {
+				parsedTime, parseErr = time.Parse("2006-01-02 15:04:05.999", *result.LastUsedAt)
+				if parseErr != nil {
+					return time.Time{}, parseErr
+				}
+			}
+		}
+	}
+	return parsedTime, nil
 }
+
